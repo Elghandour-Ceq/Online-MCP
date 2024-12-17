@@ -10,15 +10,21 @@ import { parseAssistantMessage,AssistantMessageContent } from "../assistant-mess
 import { addCustomInstructions, SYSTEM_PROMPT } from "../prompts/system"
 import { truncateHalfConversation } from "../sliding-window"
 import pWaitFor from "p-wait-for"
+import { McpConnection } from "../../services/mcp/McpHub"
 
 export async function* attemptApiRequest(this: any, previousApiReqIndex: number): any {
+    	// Wait for MCP servers to be connected before generating system prompt
+		await pWaitFor(() => this.providerRef.deref()?.mcpHub?.isConnecting !== true, { timeout: 10_000 }).catch(() => {
+			console.error("MCP servers failed to connect in time")
+		})
+		const mcpServers = this.providerRef.deref()?.mcpHub?.connections.map((conn: McpConnection) => conn.server)
+		console.log("mcpServers for system prompt:", JSON.stringify(mcpServers, null, 2))
     console.log("[api-request] attemptApiRequest starting");
     let systemPrompt = await SYSTEM_PROMPT(this.cwd, this.api.getModel().info.supportsComputerUse ?? false, this.personality)
     if (this.customInstructions && this.customInstructions.trim()) {
         systemPrompt += addCustomInstructions(this.customInstructions)
     }
     console.log("[api-request] System prompt prepared");
-    //console.log("[api-request] API conversation history:", JSON.stringify(this.apiConversationHistory, null, 2));
 
     const stream = this.api.createMessage(systemPrompt, this.apiConversationHistory)
     const iterator = stream[Symbol.asyncIterator]()
@@ -86,6 +92,7 @@ export async function recursivelyMakeClineRequests(
     // get previous api req's index to check token usage and determine if we need to truncate conversation history
     const previousApiReqIndex = findLastIndex(this.clineMessages, (m: ClineMessage) => m.say === "api_req_started")
 
+    // getting verbose details is an expensive operation, it uses globby to top-down build file structure of project which for large projects can take a few seconds
     // getting verbose details is an expensive operation, it uses globby to top-down build file structure of project which for large projects can take a few seconds
     // for the best UX we show a placeholder api_req_started message with a loading spinner as this happens
     await this.say(
@@ -206,7 +213,6 @@ export async function recursivelyMakeClineRequests(
             })
 
             // update api_req_started to have cancelled and cost, so that we can display the cost of the partial stream
-            updateApiReqMsg(cancelReason, streamingFailedMessage)
             await this.saveClineMessages()
 
             // signals to provider that it can retrieve the saved messages from disk, as abortTask can not be awaited on in nature

@@ -73,10 +73,14 @@ export class ApiProviderManager {
         return { apiKey, provider: openrouter }
     }
 
-    private async ensureCacheDirectoryExists(): Promise<string> {
+    async ensureCacheDirectoryExists(): Promise<string> {
         const cacheDir = path.join(this.globalStoragePath, "cache")
         await ensureJsonDirectory(cacheDir)
         return cacheDir
+    }
+
+    getCachePath(): string {
+        return this.globalStoragePath
     }
 
     async readOpenRouterModels(): Promise<Record<string, ModelInfo> | undefined> {

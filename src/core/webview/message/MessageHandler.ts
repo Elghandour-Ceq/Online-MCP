@@ -12,7 +12,7 @@ import { TaskManager } from "../task/TaskManager"
 import pWaitFor from "p-wait-for"
 import WorkspaceTracker from "../../../integrations/workspace/WorkspaceTracker"
 import { ClineProvider } from "../ClineProvider"
-
+import { McpHub } from "../../../services/mcp/McpHub"
 export class MessageHandler {
     constructor(
         private readonly stateManager: StateManager,
@@ -24,7 +24,8 @@ export class MessageHandler {
         private readonly getCline: () => Cline | undefined,
         private readonly setCline: (cline: Cline | undefined) => void,
         private readonly extensionContext: vscode.ExtensionContext,
-        private readonly provider: ClineProvider
+        private readonly provider: ClineProvider,
+        private readonly mcpHub?: McpHub
     ) { }
 
     async handleMessage(message: WebviewMessage): Promise<void> {
@@ -99,6 +100,21 @@ export class MessageHandler {
             case "cancelTask":
                 await this.handleCancelTask()
                 break
+            case "openMcpSettings": {
+                 const mcpSettingsFilePath = await this.mcpHub?.getMcpSettingsFilePath()
+                 if (mcpSettingsFilePath) {
+                        openFile(mcpSettingsFilePath)
+                 }
+                 break
+                }
+            case "retryMcpServer": {
+                    try {
+                        await this.mcpHub?.retryConnection(message.text!)
+                    } catch (error) {
+                        console.error(`Failed to retry connection for ${message.text}:`, error)
+                    }
+                    break
+                }
         }
     }
 

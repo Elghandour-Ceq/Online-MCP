@@ -24,7 +24,9 @@ export interface WebviewMessage {
 		| "openMention"
 		| "cancelTask"
 		| "refreshOpenRouterModels"
-		| "retryUpdate"  // Added for update retry functionality
+		| "retryUpdate"
+		| "openMcpSettings"
+		| "retryMcpServer"  // Added for update retry functionality
 	text?: string
 	askResponse?: ClineAskResponse
 	apiConfiguration?: ApiConfiguration

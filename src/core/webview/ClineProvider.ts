@@ -11,11 +11,13 @@ import { MessageHandler } from "./message/MessageHandler"
 import { StateManager, GlobalStateKey } from "./state/StateManager"
 import { TaskManager } from "./task/TaskManager"
 import { WebviewManager } from "./webview/WebviewManager"
+import { McpHub } from "../../services/mcp/McpHub"
 
 export const GlobalFileNames = {
     apiConversationHistory: "api_conversation_history.json",
     uiMessages: "ui_messages.json",
     openRouterModels: "openrouter_models.json",
+    mcpSettings: "zaki_mcp_settings.json",
 }
 
 export class ClineProvider implements vscode.WebviewViewProvider {
@@ -25,9 +27,10 @@ export class ClineProvider implements vscode.WebviewViewProvider {
     private view?: vscode.WebviewView | vscode.WebviewPanel
     private cline?: Cline
     private workspaceTracker?: WorkspaceTracker
+    mcpHub?: McpHub
     private latestAnnouncementId = "oct-28-2024"
     private stateManager: StateManager
-    private apiProviderManager: ApiProviderManager
+    readonly apiProviderManager: ApiProviderManager
     private taskManager: TaskManager
     private webviewManager: WebviewManager
     private messageHandler: MessageHandler
@@ -40,6 +43,7 @@ export class ClineProvider implements vscode.WebviewViewProvider {
         this.outputChannel.appendLine("ZakiProvider instantiated")
         ClineProvider.activeInstances.add(this)
         this.workspaceTracker = new WorkspaceTracker(this)
+        this.mcpHub = new McpHub(this)
         this.stateManager = new StateManager(context)
         this.apiProviderManager = new ApiProviderManager(
             this.stateManager,
@@ -80,6 +84,8 @@ export class ClineProvider implements vscode.WebviewViewProvider {
         this.webviewManager.dispose()
         this.workspaceTracker?.dispose()
         this.workspaceTracker = undefined
+        this.mcpHub?.dispose()
+		this.mcpHub = undefined
         this.outputChannel.appendLine("Disposed all disposables")
         ClineProvider.activeInstances.delete(this)
     }
