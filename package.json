@@ -74,6 +74,11 @@
 				"icon": "$(add)"
 			},
 			{
+				"command": "zaki.mcpButtonClicked",
+				"title": "MCP Servers",
+				"icon": "$(server)"
+			},
+			{
 				"command": "zaki.historyButtonClicked",
 				"title": "History",
 				"icon": "$(history)"
@@ -107,18 +112,23 @@
 					"when": "view == claude-dev.SidebarProvider"
 				},
 				{
-					"command": "zaki.historyButtonClicked",
+					"command": "zaki.mcpButtonClicked",
 					"group": "navigation@2",
 					"when": "view == claude-dev.SidebarProvider"
 				},
 				{
-					"command": "zaki.popoutButtonClicked",
+					"command": "zaki.historyButtonClicked",
 					"group": "navigation@3",
 					"when": "view == claude-dev.SidebarProvider"
 				},
 				{
-					"command": "zaki.settingsButtonClicked",
+					"command": "zaki.popoutButtonClicked",
 					"group": "navigation@4",
+					"when": "view == claude-dev.SidebarProvider"
+				},
+				{
+					"command": "zaki.settingsButtonClicked",
+					"group": "navigation@5",
 					"when": "view == claude-dev.SidebarProvider"
 				}
 			],

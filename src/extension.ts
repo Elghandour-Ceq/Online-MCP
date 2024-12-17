@@ -62,12 +62,20 @@ export function activate(context: vscode.ExtensionContext) {
 		)
 	)
 
+
+
 	context.subscriptions.push(
 		vscode.commands.registerCommand("zaki.plusButtonClicked", async () => {
 			outputChannel.appendLine("Plus button Clicked")
 			await sidebarProvider.clearTask()
 			await sidebarProvider.postStateToWebview()
 			await sidebarProvider.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
+		}),
+	)
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand("zaki.mcpButtonClicked", () => {
+			sidebarProvider.postMessageToWebview({ type: "action", action: "mcpButtonClicked" })
 		}),
 	)
 

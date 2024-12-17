@@ -8,11 +8,13 @@ import WelcomeView from "./components/welcome/WelcomeView"
 import InactiveView from "./components/common/InactiveView"
 import { ExtensionStateContextProvider, useExtensionState } from "./context/ExtensionStateContext"
 import { vscode } from "./utils/vscode"
+import McpView from "./components/mcp/McpView"
 
 const AppContent = () => {
 	const { didHydrateState, showWelcome, shouldShowAnnouncement, extensionActive } = useExtensionState()
 	const [showSettings, setShowSettings] = useState(false)
 	const [showHistory, setShowHistory] = useState(false)
+	const [showMcp, setShowMcp] = useState(false)
 	const [showAnnouncement, setShowAnnouncement] = useState(false)
 
 	const handleMessage = useCallback((e: MessageEvent) => {
@@ -23,14 +25,22 @@ const AppContent = () => {
 					case "settingsButtonClicked":
 						setShowSettings(true)
 						setShowHistory(false)
+						setShowMcp(false)
 						break
 					case "historyButtonClicked":
 						setShowSettings(false)
 						setShowHistory(true)
+						setShowMcp(false)
+						break
+					case "mcpButtonClicked":
+						setShowSettings(false)
+						setShowHistory(false)
+						setShowMcp(true)
 						break
 					case "chatButtonClicked":
 						setShowSettings(false)
 						setShowHistory(false)
+						setShowMcp(false)
 						break
 				}
 				break
@@ -63,13 +73,15 @@ const AppContent = () => {
 				<>
 					{showSettings && <SettingsView onDone={() => setShowSettings(false)} />}
 					{showHistory && <HistoryView onDone={() => setShowHistory(false)} />}
+					{showMcp && <McpView onDone={() => setShowMcp(false)} />}	
 					{/* Do not conditionally load ChatView, it's expensive and there's state we don't want to lose (user input, disableInput, askResponse promise, etc.) */}
 					<ChatView
 						showHistoryView={() => {
 							setShowSettings(false)
+							setShowMcp(false)
 							setShowHistory(true)
 						}}
-						isHidden={showSettings || showHistory}
+						isHidden={showSettings || showHistory || showMcp}
 						showAnnouncement={showAnnouncement}
 						hideAnnouncement={() => {
 							setShowAnnouncement(false)
