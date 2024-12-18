@@ -43,13 +43,13 @@ export class ClineProvider implements vscode.WebviewViewProvider {
         this.outputChannel.appendLine("ZakiProvider instantiated")
         ClineProvider.activeInstances.add(this)
         this.workspaceTracker = new WorkspaceTracker(this)
-        this.mcpHub = new McpHub(this)
         this.stateManager = new StateManager(context)
         this.apiProviderManager = new ApiProviderManager(
             this.stateManager,
-            path.join(cwd, ".zaki"),
+            context.globalStoragePath,
             GlobalFileNames
         )
+        this.mcpHub = new McpHub(this)
         this.taskManager = new TaskManager(
             this.stateManager,
             path.join(cwd, ".zaki"),
