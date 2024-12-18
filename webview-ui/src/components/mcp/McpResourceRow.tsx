@@ -1,15 +1,18 @@
 import { McpResource, McpResourceTemplate } from "../../../../src/shared/mcp"
+
 type McpResourceRowProps = {
 	item: McpResource | McpResourceTemplate
 }
+
 const McpResourceRow = ({ item }: McpResourceRowProps) => {
 	const isTemplate = "uriTemplate" in item
 	const uri = isTemplate ? item.uriTemplate : item.uri
+
 	return (
 		<div
 			key={uri}
 			style={{
-				padding: "8px 0",
+				padding: "3px 0",
 			}}>
 			<div
 				style={{
@@ -55,4 +58,5 @@ const McpResourceRow = ({ item }: McpResourceRowProps) => {
 		</div>
 	)
 }
+
 export default McpResourceRow

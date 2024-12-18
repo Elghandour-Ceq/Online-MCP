@@ -141,7 +141,8 @@ export const ChatRowContent = ({
 							style={{ color: normalColor, marginBottom: "-1.5px" }}></span>
 					),
 					<span style={{ color: normalColor, fontWeight: "bold" }}>
-						Cline wants to use the <code>{mcpServerUse.serverName}</code> MCP server:
+						Cline wants to {mcpServerUse.type === "use_mcp_tool" ? "use a tool" : "access a resource"} on
+						the <code>{mcpServerUse.serverName}</code> MCP server:
 					</span>,
 				]
 			case "completion_result":
@@ -815,12 +816,12 @@ export const ChatRowContent = ({
 											}}
 										/>
 										{useMcpServer.arguments && (
-											<div style={{ marginTop: "6px" }}>
+											<div style={{ marginTop: "8px" }}>
 												<div
 													style={{
 														marginBottom: "4px",
 														opacity: 0.8,
-														fontSize: "11px",
+														fontSize: "12px",
 														textTransform: "uppercase",
 													}}>
 													Arguments

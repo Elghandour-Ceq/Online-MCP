@@ -107,9 +107,9 @@ export class MessageHandler {
                  }
                  break
                 }
-            case "retryMcpServer": {
+            case "restartMcpServer": {
                     try {
-                        await this.mcpHub?.retryConnection(message.text!)
+                        await this.mcpHub?.restartConnection(message.text!)
                     } catch (error) {
                         console.error(`Failed to retry connection for ${message.text}:`, error)
                     }

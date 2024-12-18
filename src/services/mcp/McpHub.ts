@@ -23,6 +23,7 @@ import {
 } from "../../shared/mcp"
 import { fileExistsAtPath } from "../../utils/fs"
 import { arePathsEqual } from "../../utils/path"
+import delay from "delay"
 
 export type McpConnection = {
 	server: McpServer
@@ -59,10 +60,8 @@ export class McpHub {
 		if (!provider) {
 			throw new Error("Provider not available")
 		}
-		const mcpSettingsFilePath = path.join(
-			await provider.ensureSettingsDirectoryExists(),
-			GlobalFileNames.mcpSettings,
-		)
+		const settingsDir = await provider.apiProviderManager.ensureSettingsDirectoryExists()
+		const mcpSettingsFilePath = path.join(settingsDir, GlobalFileNames.mcpSettings)
 		const fileExists = await fileExistsAtPath(mcpSettingsFilePath)
 		if (!fileExists) {
 			await fs.writeFile(
@@ -121,14 +120,14 @@ export class McpHub {
 	}
 
 	private async connectToServer(name: string, config: StdioServerParameters): Promise<void> {
-		// Remove existing connection if it exists
+		// Remove existing connection if it exists (should never happen, the connection should be deleted beforehand)
 		this.connections = this.connections.filter((conn) => conn.server.name !== name)
 
 		try {
 			// Each MCP server requires its own transport connection and has unique capabilities, configurations, and error handling. Having separate clients also allows proper scoping of resources/tools and independent server management like reconnection.
 			const client = new Client(
 				{
-					name: "Cline",
+					name: "Zaki",
 					version: this.providerRef.deref()?.context.extension?.packageJSON?.version ?? "1.0.0",
 				},
 				{
@@ -146,21 +145,25 @@ export class McpHub {
 				},
 			})
 
-			transport.onerror = (error) => {
+			transport.onerror = async (error) => {
 				console.error(`Transport error for "${name}":`, error)
 				const connection = this.connections.find((conn) => conn.server.name === name)
 				if (connection) {
 					connection.server.status = "disconnected"
 					connection.server.error = error.message
 				}
+				await this.notifyWebviewOfServerChanges()
 			}
+			
 
-			transport.onclose = () => {
+			transport.onclose = async () => {
 				const connection = this.connections.find((conn) => conn.server.name === name)
 				if (connection) {
 					connection.server.status = "disconnected"
 				}
+				await this.notifyWebviewOfServerChanges()
 			}
+			
 
 			// If the config is invalid, show an error
 			if (!StdioConfigSchema.safeParse(config).success) {
@@ -176,11 +179,9 @@ export class McpHub {
 					transport,
 				}
 				this.connections.push(connection)
-				await this.notifyWebviewOfServerChanges()
 				return
 			}
 
-			await client.connect(transport)
 			const connection: McpConnection = {
 				server: {
 					name,
@@ -191,36 +192,14 @@ export class McpHub {
 				transport,
 			}
 			this.connections.push(connection)
+
+			this.connections.push(connection)
 			connection.server.status = "connected"
-
-			// // Set up notification handlers
-			// client.setNotificationHandler(
-			// 	// @ts-ignore-next-line
-			// 	{ method: "notifications/tools/list_changed" },
-			// 	async () => {
-			// 		console.log(`Tools changed for server: ${name}`)
-			// 		connection.server.tools = await this.fetchTools(name)
-			// 		await this.notifyWebviewOfServerChanges()
-			// 	},
-			// )
-
-			// client.setNotificationHandler(
-			// 	// @ts-ignore-next-line
-			// 	{ method: "notifications/resources/list_changed" },
-			// 	async () => {
-			// 		console.log(`Resources changed for server: ${name}`)
-			// 		connection.server.resources = await this.fetchResources(name)
-			// 		connection.server.resourceTemplates = await this.fetchResourceTemplates(name)
-			// 		await this.notifyWebviewOfServerChanges()
-			// 	},
-			// )
 
 			// Initial fetch of tools and resources
 			connection.server.tools = await this.fetchToolsList(name)
 			connection.server.resources = await this.fetchResourcesList(name)
 			connection.server.resourceTemplates = await this.fetchResourceTemplatesList(name)
-
-			await this.notifyWebviewOfServerChanges()
 		} catch (error) {
 			// Update status with error
 			const connection = this.connections.find((conn) => conn.server.name === name)
@@ -228,7 +207,6 @@ export class McpHub {
 				connection.server.status = "disconnected"
 				connection.server.error = error instanceof Error ? error.message : String(error)
 			}
-			await this.notifyWebviewOfServerChanges()
 			throw error
 		}
 	}
@@ -273,15 +251,12 @@ export class McpHub {
 		const connection = this.connections.find((conn) => conn.server.name === name)
 		if (connection) {
 			try {
-				// connection.client.removeNotificationHandler("notifications/tools/list_changed")
-				// connection.client.removeNotificationHandler("notifications/resources/list_changed")
 				await connection.transport.close()
 				await connection.client.close()
 			} catch (error) {
 				console.error(`Failed to close transport for ${name}:`, error)
 			}
 			this.connections = this.connections.filter((conn) => conn.server.name !== name)
-			await this.notifyWebviewOfServerChanges()
 		}
 	}
 
@@ -321,10 +296,11 @@ export class McpHub {
 			}
 			// If server exists with same config, do nothing
 		}
+		await this.notifyWebviewOfServerChanges()
 		this.isConnecting = false
 	}
 
-	async retryConnection(serverName: string): Promise<void> {
+	async restartConnection(serverName: string): Promise<void> {
 		this.isConnecting = true
 		const provider = this.providerRef.deref()
 		if (!provider) {
@@ -335,8 +311,16 @@ export class McpHub {
 		const connection = this.connections.find((conn) => conn.server.name === serverName)
 		const config = connection?.server.config
 		if (config) {
-			// Try to connect again using existing config
-			await this.connectToServer(serverName, JSON.parse(config))
+			connection.server.status = "connecting"
+			await this.notifyWebviewOfServerChanges()
+			await delay(500) // artificial delay to show user that server is restarting
+			try {
+				await this.deleteConnection(serverName)
+				// Try to connect again using existing config
+				await this.connectToServer(serverName, JSON.parse(config))
+			} catch (error) {
+				console.error(`Failed to restart connection for ${serverName}:`, error)
+			}
 		}
 
 		await this.notifyWebviewOfServerChanges()
@@ -344,13 +328,22 @@ export class McpHub {
 	}
 
 	private async notifyWebviewOfServerChanges(): Promise<void> {
+		// servers should always be sorted in the order they are defined in the settings file
+		const settingsPath = await this.getMcpSettingsFilePath()
+		const content = await fs.readFile(settingsPath, "utf-8")
+		const config = JSON.parse(content)
+		const serverOrder = Object.keys(config.mcpServers || {})
 		await this.providerRef.deref()?.postMessageToWebview({
 			type: "mcpServers",
-			mcpServers: this.connections.map((connection) => connection.server),
+			mcpServers: [...this.connections]
+				.sort((a, b) => {
+					const indexA = serverOrder.indexOf(a.server.name)
+					const indexB = serverOrder.indexOf(b.server.name)
+					return indexA - indexB
+				})
+				.map((connection) => connection.server),
 		})
 	}
-
-	// Using server
 
 	async readResource(serverName: string, uri: string): Promise<McpResourceResponse> {
 		const connection = this.connections.find((conn) => conn.server.name === serverName)

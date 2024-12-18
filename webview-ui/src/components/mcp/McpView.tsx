@@ -150,9 +150,9 @@ const ServerRow = ({ server }: { server: McpServer }) => {
 		}
 	}
 
-	const handleRetry = () => {
+	const handleRestart = () => {
 		vscode.postMessage({
-			type: "retryMcpServer",
+			type: "restartMcpServer",
 			text: server.name,
 		})
 	}
@@ -190,15 +190,20 @@ const ServerRow = ({ server }: { server: McpServer }) => {
 			{server.error ? (
 				<div
 					style={{
-						padding: "8px",
 						fontSize: "13px",
 						background: "var(--vscode-textCodeBlock-background)",
 						borderRadius: "0 0 4px 4px",
+						width: "100%",
 					}}>
-					<div style={{ color: "var(--vscode-testing-iconFailed)", marginBottom: "8px" }}>{server.error}</div>
-					<VSCodeButton appearance="secondary" onClick={handleRetry}>
-						<span className="codicon codicon-debug-restart" style={{ marginRight: "6px" }}></span>
-						Retry Connection
+					<div style={{ color: "var(--vscode-testing-iconFailed)", marginBottom: "8px", padding: "0 10px" }}>
+						{server.error}
+					</div>
+					<VSCodeButton
+						appearance="secondary"
+						onClick={handleRestart}
+						disabled={server.status === "connecting"}
+						style={{ width: "calc(100% - 20px)", margin: "0 10px 10px 10px" }}>
+						{server.status === "connecting" ? "Retrying..." : "Retry Connection"}
 					</VSCodeButton>
 				</div>
 			) : (
@@ -206,7 +211,7 @@ const ServerRow = ({ server }: { server: McpServer }) => {
 					<div
 						style={{
 							background: "var(--vscode-textCodeBlock-background)",
-							padding: "0 12px 0 12px",
+							padding: "0 10px 10px 10px",
 							fontSize: "13px",
 							borderRadius: "0 0 4px 4px",
 						}}>
@@ -217,7 +222,7 @@ const ServerRow = ({ server }: { server: McpServer }) => {
 							<VSCodePanelView id="tools-view">
 								{server.tools && server.tools.length > 0 ? (
 									<div
-										style={{ display: "flex", flexDirection: "column", gap: "3px", width: "100%" }}>
+										style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
 										{server.tools.map((tool) => (
 											<McpToolRow key={tool.name} tool={tool} />
 										))}
@@ -233,7 +238,7 @@ const ServerRow = ({ server }: { server: McpServer }) => {
 								{(server.resources && server.resources.length > 0) ||
 								(server.resourceTemplates && server.resourceTemplates.length > 0) ? (
 									<div
-										style={{ display: "flex", flexDirection: "column", gap: "3px", width: "100%" }}>
+										style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
 										{[...(server.resourceTemplates || []), ...(server.resources || [])].map(
 											(item) => (
 												<McpResourceRow
@@ -250,6 +255,14 @@ const ServerRow = ({ server }: { server: McpServer }) => {
 								)}
 							</VSCodePanelView>
 						</VSCodePanels>
+
+						<VSCodeButton
+							appearance="secondary"
+							onClick={handleRestart}
+							disabled={server.status === "connecting"}
+							style={{ width: "calc(100% - 14px)", margin: "0 7px 3px 7px" }}>
+							{server.status === "connecting" ? "Restarting..." : "Restart Server"}
+						</VSCodeButton>
 					</div>
 				)
 			)}
