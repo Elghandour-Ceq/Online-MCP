@@ -7,12 +7,9 @@ import { readJsonFile, writeJsonFile, ensureJsonDirectory } from "../../../utils
 import { buildApiHandler } from "../../../api"
 import { Cline } from "../../cline/Cline"
 import { StateManager } from "../state/StateManager"
+import * as os from "os"
 
-export const GlobalDirNames = {
-    cache: "cache",
-    settings: "settings",
-    mcpServers: "mcp-servers",
-}
+
 
 export class ApiProviderManager {
     constructor(
@@ -81,20 +78,20 @@ export class ApiProviderManager {
     }
 
     private async ensureCacheDirectoryExists(): Promise<string> {
-        const cacheDir = path.join(this.globalStoragePath, GlobalDirNames.cache)
+        const cacheDir = path.join(this.globalStoragePath, "cache")
         await ensureJsonDirectory(cacheDir)
         return cacheDir
     }
 
     // MCP
     async ensureMcpServersDirectoryExists(): Promise<string> {
-        const mcpServersDir = path.join(this.globalStoragePath, GlobalDirNames.mcpServers)
+        const mcpServersDir = path.join(os.homedir(), "Documents", "ZAKI", "MCP")
         await fs.mkdir(mcpServersDir, { recursive: true })
         return mcpServersDir
     }
 
     async ensureSettingsDirectoryExists(): Promise<string> {
-        const settingsDir = path.join(this.globalStoragePath, GlobalDirNames.settings)
+        const settingsDir = path.join(this.globalStoragePath, "settings")
         await fs.mkdir(settingsDir, { recursive: true })
         return settingsDir
     }
