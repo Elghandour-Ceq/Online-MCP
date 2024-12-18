@@ -69,7 +69,8 @@ export class ClineProvider implements vscode.WebviewViewProvider {
             () => this.cline,
             (cline) => { this.cline = cline },
             this.context,
-            this
+            this,
+            this.mcpHub
         )
     }
 
@@ -94,14 +95,19 @@ export class ClineProvider implements vscode.WebviewViewProvider {
         return findLast(Array.from(this.activeInstances), (instance) => instance.view?.visible === true)
     }
 
-    resolveWebviewView(
+    async resolveWebviewView(
         webviewView: vscode.WebviewView | vscode.WebviewPanel,
-    ): void | Thenable<void> {
+    ): Promise<void> {
         this.outputChannel.appendLine("Resolving webview view")
         this.view = webviewView
 
         this.webviewManager.setupWebview(webviewView)
         this.setWebviewMessageListener(webviewView.webview)
+
+        // Initialize MCP servers and notify webview immediately after setup
+        if (this.mcpHub) {
+            await this.mcpHub.initialize()
+        }
 
         webviewView.onDidDispose(
             async () => {

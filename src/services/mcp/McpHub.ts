@@ -54,7 +54,7 @@ export class McpHub {
 	constructor(provider: ClineProvider) {
 		this.providerRef = new WeakRef(provider)
 		this.watchMcpSettingsFile()
-		this.initializeMcpServers()
+		// Remove initialization from constructor
 	}
 
 	getServers(): McpServer[] {
@@ -125,12 +125,13 @@ export class McpHub {
 		)
 	}
 
-	private async initializeMcpServers(): Promise<void> {
+	public async initialize(): Promise<void> {
 		try {
 			const settingsPath = await this.getMcpSettingsFilePath()
 			const content = await fs.readFile(settingsPath, "utf-8")
 			const config = JSON.parse(content)
 			await this.updateServerConnections(config.mcpServers || {})
+			await this.notifyWebviewOfServerChanges()
 		} catch (error) {
 			console.error("Failed to initialize MCP servers:", error)
 		}
@@ -231,28 +232,6 @@ export class McpHub {
 			}
 			transport.start = async () => {} // No-op now, .connect() won't fail
 
-			// // Set up notification handlers
-			// client.setNotificationHandler(
-			// 	// @ts-ignore-next-line
-			// 	{ method: "notifications/tools/list_changed" },
-			// 	async () => {
-			// 		console.log(`Tools changed for server: ${name}`)
-			// 		connection.server.tools = await this.fetchTools(name)
-			// 		await this.notifyWebviewOfServerChanges()
-			// 	},
-			// )
-
-			// client.setNotificationHandler(
-			// 	// @ts-ignore-next-line
-			// 	{ method: "notifications/resources/list_changed" },
-			// 	async () => {
-			// 		console.log(`Resources changed for server: ${name}`)
-			// 		connection.server.resources = await this.fetchResources(name)
-			// 		connection.server.resourceTemplates = await this.fetchResourceTemplates(name)
-			// 		await this.notifyWebviewOfServerChanges()
-			// 	},
-			// )
-
 			// Connect
 			await client.connect(transport)
 			connection.server.status = "connected"
@@ -318,10 +297,6 @@ export class McpHub {
 		const connection = this.connections.find((conn) => conn.server.name === name)
 		if (connection) {
 			try {
-				// connection.client.removeNotificationHandler("notifications/tools/list_changed")
-				// connection.client.removeNotificationHandler("notifications/resources/list_changed")
-				// connection.client.removeNotificationHandler("notifications/stderr")
-				// connection.client.removeNotificationHandler("notifications/stderr")
 				await connection.transport.close()
 				await connection.client.close()
 			} catch (error) {
@@ -429,7 +404,7 @@ export class McpHub {
 		this.isConnecting = false
 	}
 
-	private async notifyWebviewOfServerChanges(): Promise<void> {
+	public async notifyWebviewOfServerChanges(): Promise<void> {
 		// servers should always be sorted in the order they are defined in the settings file
 		const settingsPath = await this.getMcpSettingsFilePath()
 		const content = await fs.readFile(settingsPath, "utf-8")

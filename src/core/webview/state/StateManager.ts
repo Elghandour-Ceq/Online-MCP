@@ -68,13 +68,23 @@ export class StateManager {
     }
 
     private async excludeZakiFolder() {
-        const config = vscode.workspace.getConfiguration();
-        const filesExclude = config.get('files.exclude') as { [key: string]: boolean };
-        
-        if (!filesExclude['.zaki']) {
-            filesExclude['.zaki'] = true;
-            await config.update('files.exclude', filesExclude, vscode.ConfigurationTarget.Workspace);
-            console.log('[DEBUG] Added .zaki folder to files.exclude');
+        try {
+            const config = vscode.workspace.getConfiguration();
+            const filesExclude = config.get('files.exclude') as { [key: string]: boolean };
+            
+            if (!filesExclude['.zaki']) {
+                filesExclude['.zaki'] = true;
+                // Use ConfigurationTarget.Global if no workspace is available
+                const target = vscode.workspace.workspaceFolders 
+                    ? vscode.ConfigurationTarget.Workspace 
+                    : vscode.ConfigurationTarget.Global;
+                
+                await config.update('files.exclude', filesExclude, target);
+                console.log('[DEBUG] Added .zaki folder to files.exclude');
+            }
+        } catch (error) {
+            // Log error but don't throw - allow the extension to continue functioning
+            console.warn('[WARN] Failed to exclude .zaki folder:', error);
         }
     }
 

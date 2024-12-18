@@ -122,6 +122,11 @@ export class MessageHandler {
         await this.postStateToWebview()
         this.workspaceTracker?.initializeFilePaths()
 
+        // Ensure MCP servers are initialized and synced
+        if (this.mcpHub) {
+            await this.mcpHub.initialize()
+        }
+
         const cachedModels = await this.apiProviderManager.readOpenRouterModels()
         if (cachedModels) {
             await this.postMessage({ type: "openRouterModels", openRouterModels: cachedModels })
