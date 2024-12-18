@@ -221,7 +221,9 @@ export class McpHub {
 					const connection = this.connections.find((conn) => conn.server.name === name)
 					if (connection) {
 						this.appendErrorMessage(connection, errorOutput)
-						await this.notifyWebviewOfServerChanges()
+						if (connection.server.status === "disconnected") {
+							await this.notifyWebviewOfServerChanges()
+						}
 					}
 				})
 			} else {
@@ -419,6 +421,7 @@ export class McpHub {
 				vscode.window.showInformationMessage(`${serverName} MCP server connected`)
 			} catch (error) {
 				console.error(`Failed to restart connection for ${serverName}:`, error)
+				vscode.window.showErrorMessage(`Failed to connect to ${serverName} MCP server`)
 			}
 		}
 
@@ -449,7 +452,9 @@ export class McpHub {
 	async readResource(serverName: string, uri: string): Promise<McpResourceResponse> {
 		const connection = this.connections.find((conn) => conn.server.name === serverName)
 		if (!connection) {
-			throw new Error(`No connection found for server: ${serverName}`)
+			throw new Error(
+				`No connection found for server: ${serverName}. Please make sure to use MCP servers available under 'Connected MCP Servers'.`,
+			)
 		}
 		return await connection.client.request(
 			{
@@ -469,7 +474,9 @@ export class McpHub {
 	): Promise<McpToolCallResponse> {
 		const connection = this.connections.find((conn) => conn.server.name === serverName)
 		if (!connection) {
-			throw new Error(`No connection found for server: ${serverName}`)
+			throw new Error(
+				`No connection found for server: ${serverName}. Please make sure to use MCP servers available under 'Connected MCP Servers'.`,
+			)
 		}
 		return await connection.client.request(
 			{

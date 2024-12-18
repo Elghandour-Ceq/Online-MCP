@@ -114,11 +114,11 @@ const McpView = ({ onDone }: McpViewProps) => {
 						Model Context Protocol
 					</VSCodeLink>{" "}
 					enables communication with locally running MCP servers that provide additional tools and resources
-					to extend Cline's capabilities. You can use{" "}
+					to extend ZAKI's capabilities. You can use{" "}
 					<VSCodeLink href="https://github.com/modelcontextprotocol/servers" style={{ display: "inline" }}>
 						community-made servers
 					</VSCodeLink>{" "}
-					or ask Cline to create new tools specific to your workflow (e.g., "add a tool that pulls GitHub
+					or ask ZAKI to create new tools specific to your workflow (e.g., "add a tool that pulls GitHub
 					issues")
 				</div>
 

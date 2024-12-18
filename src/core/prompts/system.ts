@@ -1,7 +1,8 @@
-import osName from "os-name"
 import defaultShell from "default-shell"
 import os from "os"
+import osName from "os-name"
 import { McpHub } from "../../services/mcp/McpHub"
+
 
 
 export const SYSTEM_PROMPT = async (
@@ -98,15 +99,12 @@ Usage:
 ## list_code_definition_names
 Description: Request to list definition names (classes, functions, methods, etc.) used in source code files at the top level of the specified directory. This tool provides insights into the codebase structure and important constructs, encapsulating high-level concepts and relationships that are crucial for understanding the overall architecture.
 Parameters:
-- path: (required) The path of the directory (relative to the current working directory ${cwd.toPosix()}) to list top level source code definitions for, no files only directory.
-- recursive: (optional) Whether to list definition names recursively. Use true for recursive listing, false or omit for top-level only.
+- path: (required) The path of the directory (relative to the current working directory ${cwd.toPosix()}) to list top level source code definitions for.
 Usage:
 <list_code_definition_names>
 <path>Directory path here</path>
-<recursive>true or false (optional)</recursive>
 </list_code_definition_names>${
-	//supportsComputerUse
-  false
+	supportsComputerUse
 		? `
 
 ## browser_action
@@ -145,7 +143,6 @@ Usage:
 		: ""
 }
 
-
 ## use_mcp_tool
 Description: Request to use a tool provided by a connected MCP server. Each MCP server can provide multiple tools with different capabilities. Tools have defined input schemas that specify required and optional parameters.
 Parameters:
@@ -163,6 +160,7 @@ Usage:
 }
 </arguments>
 </use_mcp_tool>
+
 ## access_mcp_resource
 Description: Request to access a resource provided by a connected MCP server. Resources represent data sources that can be used as context, such as files, API responses, or system information.
 Parameters:
@@ -227,8 +225,8 @@ Your final result description here
 </content>
 </write_to_file>
 
-
 ## Example 3: Requesting to use an MCP tool
+
 <use_mcp_tool>
 <server_name>weather-server</server_name>
 <tool_name>get_forecast</tool_name>
@@ -239,7 +237,9 @@ Your final result description here
 }
 </arguments>
 </use_mcp_tool>
+
 ## Example 4: Requesting to access an MCP resource
+
 <access_mcp_resource>
 <server_name>weather-server</server_name>
 <uri>weather://san-francisco/current</uri>
@@ -314,26 +314,35 @@ ${
 		: "(No MCP servers currently connected)"
 }
 
-
 ## Creating an MCP Server
+
 The user may ask you something along the lines of "add a tool" that does some function, in other words to create an MCP server that provides tools and resources that may connect to external APIs for example. You have the ability to create an MCP server and add it to a configuration file that will then expose the tools and resources for you to use with \`use_mcp_tool\` and \`access_mcp_resource\`.
+
 When creating MCP servers, it's important to understand that they operate in a non-interactive environment. The server cannot initiate OAuth flows, open browser windows, or prompt for user input during runtime. All credentials and authentication tokens must be provided upfront through environment variables in the MCP settings configuration. For example, Spotify's API uses OAuth to get a refresh token for the user, but the MCP server cannot initiate this flow. While you can walk the user through obtaining an application client ID and secret, you may have to create a separate one-time setup script (like get-refresh-token.js) that captures and logs the final piece of the puzzle: the user's refresh token (i.e. you might run the script using execute_command which would open a browser for authentication, and then log the refresh token so that you can see it in the command output for you to use in the MCP settings configuration).
+
 Unless the user specifies otherwise, new MCP servers should be created in: ${await mcpHub.getMcpServersPath()}
+
 ### Example MCP Server
+
 For example, if the user wanted to give you the ability to retrieve weather information, you could create an MCP server that uses the OpenWeather API to get weather information, add it to the MCP settings configuration file, and then notice that you now have access to new tools and resources in the system prompt that you might use to show the user your new capabilities.
+
 The following example demonstrates how to build an MCP server that provides weather data functionality. While this example shows how to implement resources, resource templates, and tools, in practice you should prefer using tools since they are more flexible and can handle dynamic parameters. The resource and resource template implementations are included here mainly for demonstration purposes of the different MCP capabilities, but a real weather server would likely just expose tools for fetching weather data. (The following steps are for macOS)
+
 1. Use the \`create-typescript-server\` tool to bootstrap a new project in the default MCP servers directory:
+
 \`\`\`bash
+cd ${await mcpHub.getMcpServersPath()}
 npx @modelcontextprotocol/create-server weather-server
 cd weather-server
 # Install dependencies
 npm install axios
 \`\`\`
+
 This will create a new project with the following structure:
 
 \`\`\`
 weather-server/
-  ├── package.json     
+  ├── package.json
       {
         ...
         "type": "module", // added by default, uses ES module syntax (import/export) rather than CommonJS (require/module.exports) (Important to know if you create additional scripts in this server repository like a get-refresh-token.js script)
@@ -356,12 +365,13 @@ weather-server/
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-  ListToolsRequestSchema,
   CallToolRequestSchema,
   ErrorCode,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ListToolsRequestSchema,
   McpError,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
 
@@ -414,7 +424,6 @@ class WeatherServer {
       },
     });
 
-    // Setup handlers
     this.setupResourceHandlers();
     this.setupToolHandlers();
     
@@ -428,10 +437,10 @@ class WeatherServer {
 
   // MCP Resources represent any kind of UTF-8 encoded data that an MCP server wants to make available to clients, such as database records, API responses, log files, and more. Servers define direct resources with a static URI or dynamic resources with a URI template that follows the format \`[protocol]://[host]/[path]\`.
   private setupResourceHandlers() {
+    // For static resources, servers can expose a list of resources:
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-      // For static resources, servers can expose a list of resources:
       resources: [
-        // This is a poor example since you could use the resource template to get the same information but demonstrates how to define a static resource
+        // This is a poor example since you could use the resource template to get the same information but this demonstrates how to define a static resource
         {
           uri: \`weather://San Francisco/current\`, // Unique identifier for San Francisco weather resource
           name: \`Current weather in San Francisco\`, // Human-readable name
@@ -441,17 +450,24 @@ class WeatherServer {
             'Real-time weather data for San Francisco including temperature, conditions, humidity, and wind speed',
         },
       ],
-      // For dynamic resources, servers can expose URI templates:
-      resourceTemplates: [
-        {
-          uriTemplate: 'weather://{city}/current', // URI template (RFC 6570)
-          name: 'Current weather for a given city', // Human-readable name
-          mimeType: 'application/json', // Optional MIME type
-          description: 'Real-time weather data for a specified city', // Optional description
-        },
-      ],
     }));
 
+    // For dynamic resources, servers can expose resource templates:
+    this.server.setRequestHandler(
+      ListResourceTemplatesRequestSchema,
+      async () => ({
+        resourceTemplates: [
+          {
+            uriTemplate: 'weather://{city}/current', // URI template (RFC 6570)
+            name: 'Current weather for a given city', // Human-readable name
+            mimeType: 'application/json', // Optional MIME type
+            description: 'Real-time weather data for a specified city', // Optional description
+          },
+        ],
+      })
+    );
+
+    // ReadResourceRequestSchema is used for both static resources and dynamic resource templates
     this.server.setRequestHandler(
       ReadResourceRequestSchema,
       async (request) => {
@@ -640,12 +656,12 @@ npm run build
 
 ## Editing MCP Servers
 
-The user may ask to add tools or resources to an existing MCP server (listed under 'Connected MCP Servers' above: ${
+The user may ask to add tools or resources that may make sense to add to an existing MCP server (listed under 'Connected MCP Servers' above: ${
 	mcpHub
 		.getServers()
 		.map((server) => server.name)
 		.join(", ") || "(None running currently)"
-}), or may more generally ask to add functionality that may make sense to add to an existing local MCP server rather than creating a new one. This would be possible if you can locate the MCP server repository on the user's system by looking at the server arguments for a filepath. You might then use list_files and read_file to explore the files in the repository, and use write_to_file to make changes to the files.
+}, e.g. if it would use the same API. This would be possible if you can locate the MCP server repository on the user's system by looking at the server arguments for a filepath. You might then use list_files and read_file to explore the files in the repository, and use write_to_file to make changes to the files.
 
 However some MCP servers may be running from installed packages rather than a local repository, in which case it may make more sense to create a new MCP server.
 

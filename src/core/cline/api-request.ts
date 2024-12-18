@@ -22,13 +22,13 @@ export async function* attemptApiRequest(this: any, previousApiReqIndex: number)
 		if (!mcpHub) {
 			throw new Error("MCP hub not available")
 		}
-		console.log(
-			"mcpServers for system prompt:",
-			JSON.stringify(
-				mcpHub.connections.map((conn: McpConnection) => conn.server)
+		// console.log(
+		// 	"mcpServers for system prompt:",
+		// 	JSON.stringify(
+		// 		mcpHub.connections.map((conn: McpConnection) => conn.server)
 
-			),
-		)
+		// 	),
+		// )
         let systemPrompt = await SYSTEM_PROMPT(cwd, this.api.getModel().info.supportsComputerUse ?? false, mcpHub, this.personality)
         if (this.customInstructions && this.customInstructions.trim()) {
         systemPrompt += addCustomInstructions(this.customInstructions)
