@@ -13,17 +13,24 @@ import pWaitFor from "p-wait-for"
 import { McpConnection } from "../../services/mcp/McpHub"
 
 export async function* attemptApiRequest(this: any, previousApiReqIndex: number): any {
+    const cwd = this.workspaceTracker?.getCwd() ?? process.cwd()
     	// Wait for MCP servers to be connected before generating system prompt
 		await pWaitFor(() => this.providerRef.deref()?.mcpHub?.isConnecting !== true, { timeout: 10_000 }).catch(() => {
 			console.error("MCP servers failed to connect in time")
 		})
-		const mcpServers = this.providerRef.deref()?.mcpHub?.connections.map((conn: McpConnection) => conn.server)
-		console.log("mcpServers for system prompt:", JSON.stringify(mcpServers, null, 2))
-    console.log("[api-request] attemptApiRequest starting");
-    let systemPrompt = await SYSTEM_PROMPT(this.cwd, this.api.getModel().info.supportsComputerUse ?? false, this.personality, 
-    (await this.providerRef.deref()?.mcpHub?.getMcpSettingsFilePath()) || "(Unknown)",
-    mcpServers)
-    if (this.customInstructions && this.customInstructions.trim()) {
+        const mcpHub = this.providerRef.deref()?.mcpHub
+		if (!mcpHub) {
+			throw new Error("MCP hub not available")
+		}
+		console.log(
+			"mcpServers for system prompt:",
+			JSON.stringify(
+				mcpHub.connections.map((conn: McpConnection) => conn.server)
+
+			),
+		)
+        let systemPrompt = await SYSTEM_PROMPT(cwd, this.api.getModel().info.supportsComputerUse ?? false, mcpHub, this.personality)
+        if (this.customInstructions && this.customInstructions.trim()) {
         systemPrompt += addCustomInstructions(this.customInstructions)
     }
     console.log("[api-request] System prompt prepared");

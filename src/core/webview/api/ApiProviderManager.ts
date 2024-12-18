@@ -8,6 +8,12 @@ import { buildApiHandler } from "../../../api"
 import { Cline } from "../../cline/Cline"
 import { StateManager } from "../state/StateManager"
 
+export const GlobalDirNames = {
+    cache: "cache",
+    settings: "settings",
+    mcpServers: "mcp-servers",
+}
+
 export class ApiProviderManager {
     constructor(
         private readonly stateManager: StateManager,
@@ -75,13 +81,20 @@ export class ApiProviderManager {
     }
 
     private async ensureCacheDirectoryExists(): Promise<string> {
-        const cacheDir = path.join(this.globalStoragePath, "cache")
+        const cacheDir = path.join(this.globalStoragePath, GlobalDirNames.cache)
         await ensureJsonDirectory(cacheDir)
         return cacheDir
     }
 
+    // MCP
+    async ensureMcpServersDirectoryExists(): Promise<string> {
+        const mcpServersDir = path.join(this.globalStoragePath, GlobalDirNames.mcpServers)
+        await fs.mkdir(mcpServersDir, { recursive: true })
+        return mcpServersDir
+    }
+
     async ensureSettingsDirectoryExists(): Promise<string> {
-        const settingsDir = path.join(this.globalStoragePath, "settings")
+        const settingsDir = path.join(this.globalStoragePath, GlobalDirNames.settings)
         await fs.mkdir(settingsDir, { recursive: true })
         return settingsDir
     }
