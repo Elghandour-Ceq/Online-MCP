@@ -61,22 +61,21 @@ export const use_mcp_tool = async function(this: any, block: UseMcpToolToolUse) 
                 .deref()
                 ?.mcpHub?.callTool(server_name, tool_name, parsedArguments)
 
-            const toolResultPretty =
-                (toolResult?.isError
-                    ? "Error: The tool call failed"
-                    : toolResult?.content
-                        .map((item: McpToolCallResponse["content"][0]) => {
-                            if (item.type === "text") {
-                                return item.text
-                            }
-                            if (item.type === "resource") {
-                                const { blob, ...rest } = item.resource
-                                return JSON.stringify(rest, null, 2)
-                            }
-                            return ""
-                        })
-                        .filter(Boolean)
-                        .join("\n\n")) || "(Empty response)"
+            const toolResultPretty = 
+                (toolResult?.isError ? "Error:\n" : "") +
+                toolResult?.content
+                    .map((item: McpToolCallResponse["content"][0]) => {
+                        if (item.type === "text") {
+                            return item.text
+                        }
+                        if (item.type === "resource") {
+                            const { blob, ...rest } = item.resource
+                            return JSON.stringify(rest, null, 2)
+                        }
+                        return ""
+                    })
+                    .filter(Boolean)
+                    .join("\n\n") || "(No response)"
             
             await this.say("mcp_server_response", toolResultPretty)
             return [formatResponse.toolResult(toolResultPretty)]

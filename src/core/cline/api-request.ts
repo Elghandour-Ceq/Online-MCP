@@ -20,7 +20,9 @@ export async function* attemptApiRequest(this: any, previousApiReqIndex: number)
 		const mcpServers = this.providerRef.deref()?.mcpHub?.connections.map((conn: McpConnection) => conn.server)
 		console.log("mcpServers for system prompt:", JSON.stringify(mcpServers, null, 2))
     console.log("[api-request] attemptApiRequest starting");
-    let systemPrompt = await SYSTEM_PROMPT(this.cwd, this.api.getModel().info.supportsComputerUse ?? false, this.personality, mcpServers)
+    let systemPrompt = await SYSTEM_PROMPT(this.cwd, this.api.getModel().info.supportsComputerUse ?? false, this.personality, 
+    (await this.providerRef.deref()?.mcpHub?.getMcpSettingsFilePath()) || "(Unknown)",
+    mcpServers)
     if (this.customInstructions && this.customInstructions.trim()) {
         systemPrompt += addCustomInstructions(this.customInstructions)
     }
