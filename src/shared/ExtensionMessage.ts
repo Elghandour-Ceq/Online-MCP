@@ -75,6 +75,8 @@ export type ClineAsk =
 	| "resume_completed_task"
 	| "mistake_limit_reached"
 	| "browser_action_launch"
+	| "use_mcp_server"
+	
 
 export type ClineSay =
 	| "task"
@@ -91,6 +93,8 @@ export type ClineSay =
 	| "shell_integration_warning"
 	| "browser_action"
 	| "browser_action_result"
+	| "mcp_server_request_started"
+	| "mcp_server_response"
 
 export interface ClineSayTool {
 	tool:
@@ -123,6 +127,14 @@ export type BrowserActionResult = {
 	logs?: string
 	currentUrl?: string
 	currentMousePosition?: string
+}
+
+export interface ClineAskUseMcpServer {
+	serverName: string
+	type: "use_mcp_tool" | "access_mcp_resource"
+	toolName?: string
+	arguments?: string
+	uri?: string
 }
 
 export interface ClineApiReqInfo {

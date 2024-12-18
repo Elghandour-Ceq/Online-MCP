@@ -2,13 +2,22 @@ import { VSCodeBadge, VSCodeProgressRing } from "@vscode/webview-ui-toolkit/reac
 import deepEqual from "fast-deep-equal"
 import React, { memo, useEffect, useMemo, useRef } from "react"
 import { useSize } from "react-use"
-import { ClineApiReqInfo, ClineMessage, ClineSayTool } from "../../../../src/shared/ExtensionMessage"
+import {
+	ClineApiReqInfo,
+	ClineAskUseMcpServer,
+	ClineMessage,
+	ClineSayTool,
+} from "../../../../src/shared/ExtensionMessage"
 import { COMMAND_OUTPUT_STRING } from "../../../../src/shared/combineCommandSequences"
+import { useExtensionState } from "../../context/ExtensionStateContext"
+import { findMatchingResourceOrTemplate } from "../../utils/mcp"
 import { vscode } from "../../utils/vscode"
 import CodeAccordian, { removeLeadingNonAlphanumeric } from "../common/CodeAccordian"
 import CodeBlock, { CODE_BLOCK_BG_COLOR } from "../common/CodeBlock"
 import MarkdownBlock from "../common/MarkdownBlock"
 import Thumbnails from "../common/Thumbnails"
+import McpResourceRow from "../mcp/McpResourceRow"
+import McpToolRow from "../mcp/McpToolRow"
 import { highlightMentions } from "./TaskHeader"
 
 interface ChatRowProps {
@@ -67,6 +76,7 @@ export const ChatRowContent = ({
 	lastModifiedMessage,
 	isLast,
 }: ChatRowContentProps) => {
+	const { mcpServers } = useExtensionState()
 	const [cost, apiReqCancelReason, apiReqStreamingFailedMessage] = useMemo(() => {
 		if (message.text != null && message.say === "api_req_started") {
 			const info: ClineApiReqInfo = JSON.parse(message.text)
@@ -81,6 +91,9 @@ export const ChatRowContent = ({
 			: undefined
 	const isCommandExecuting =
 		isLast && lastModifiedMessage?.ask === "command" && lastModifiedMessage?.text?.includes(COMMAND_OUTPUT_STRING)
+
+	const isMcpServerResponding = isLast && lastModifiedMessage?.say === "mcp_server_request_started"
+
 	const type = message.type === "ask" ? message.ask : message.say
 
 	const normalColor = "var(--vscode-foreground)"
@@ -102,7 +115,7 @@ export const ChatRowContent = ({
 					<span
 						className="codicon codicon-error"
 						style={{ color: errorColor, marginBottom: "-1.5px" }}></span>,
-					<span style={{ color: errorColor, fontWeight: "bold" }}>Zaki is having trouble...</span>,
+					<span style={{ color: errorColor, fontWeight: "bold" }}>Cline is having trouble...</span>,
 				]
 			case "command":
 				return [
@@ -114,7 +127,21 @@ export const ChatRowContent = ({
 							style={{ color: normalColor, marginBottom: "-1.5px" }}></span>
 					),
 					<span style={{ color: normalColor, fontWeight: "bold" }}>
-						Zaki wants to execute this command:
+						Cline wants to execute this command:
+					</span>,
+				]
+			case "use_mcp_server":
+				const mcpServerUse = JSON.parse(message.text || "{}") as ClineAskUseMcpServer
+				return [
+					isMcpServerResponding ? (
+						<ProgressIndicator />
+					) : (
+						<span
+							className="codicon codicon-server"
+							style={{ color: normalColor, marginBottom: "-1.5px" }}></span>
+					),
+					<span style={{ color: normalColor, fontWeight: "bold" }}>
+						Cline wants to use the <code>{mcpServerUse.serverName}</code> MCP server:
 					</span>,
 				]
 			case "completion_result":
@@ -176,12 +203,20 @@ export const ChatRowContent = ({
 					<span
 						className="codicon codicon-question"
 						style={{ color: normalColor, marginBottom: "-1.5px" }}></span>,
-					<span style={{ color: normalColor, fontWeight: "bold" }}>Zaki has a question:</span>,
+					<span style={{ color: normalColor, fontWeight: "bold" }}>Cline has a question:</span>,
 				]
 			default:
 				return [null, null]
 		}
-	}, [type, cost, apiRequestFailedMessage, isCommandExecuting, apiReqCancelReason])
+	}, [
+		type,
+		cost,
+		apiRequestFailedMessage,
+		isCommandExecuting,
+		apiReqCancelReason,
+		isMcpServerResponding,
+		message.text,
+	])
 
 	const headerStyle: React.CSSProperties = {
 		display: "flex",
@@ -217,7 +252,7 @@ export const ChatRowContent = ({
 					<>
 						<div style={headerStyle}>
 							{toolIcon("edit")}
-							<span style={{ fontWeight: "bold" }}>Zaki wants to edit this file:</span>
+							<span style={{ fontWeight: "bold" }}>Cline wants to edit this file:</span>
 						</div>
 						<CodeAccordian
 							isLoading={message.partial}
@@ -233,7 +268,7 @@ export const ChatRowContent = ({
 					<>
 						<div style={headerStyle}>
 							{toolIcon("new-file")}
-							<span style={{ fontWeight: "bold" }}>Zaki wants to create a new file:</span>
+							<span style={{ fontWeight: "bold" }}>Cline wants to create a new file:</span>
 						</div>
 						<CodeAccordian
 							isLoading={message.partial}
@@ -250,7 +285,7 @@ export const ChatRowContent = ({
 						<div style={headerStyle}>
 							{toolIcon("file-code")}
 							<span style={{ fontWeight: "bold" }}>
-								{message.type === "ask" ? "Zaki wants to read this file:" : "Zaki read this file:"}
+								{message.type === "ask" ? "Cline wants to read this file:" : "Cline read this file:"}
 							</span>
 						</div>
 						{/* <CodeAccordian
@@ -308,8 +343,8 @@ export const ChatRowContent = ({
 							{toolIcon("folder-opened")}
 							<span style={{ fontWeight: "bold" }}>
 								{message.type === "ask"
-									? "Zaki wants to view the top level files in this directory:"
-									: "Zaki viewed the top level files in this directory:"}
+									? "Cline wants to view the top level files in this directory:"
+									: "Cline viewed the top level files in this directory:"}
 							</span>
 						</div>
 						<CodeAccordian
@@ -328,8 +363,8 @@ export const ChatRowContent = ({
 							{toolIcon("folder-opened")}
 							<span style={{ fontWeight: "bold" }}>
 								{message.type === "ask"
-									? "Zaki wants to recursively view all files in this directory:"
-									: "Zaki recursively viewed all files in this directory:"}
+									? "Cline wants to recursively view all files in this directory:"
+									: "Cline recursively viewed all files in this directory:"}
 							</span>
 						</div>
 						<CodeAccordian
@@ -348,8 +383,8 @@ export const ChatRowContent = ({
 							{toolIcon("file-code")}
 							<span style={{ fontWeight: "bold" }}>
 								{message.type === "ask"
-									? "Zaki wants to view source code definition names used in this directory:"
-									: "Zaki viewed source code definition names used in this directory:"}
+									? "Cline wants to view source code definition names used in this directory:"
+									: "Cline viewed source code definition names used in this directory:"}
 							</span>
 						</div>
 						<CodeAccordian
@@ -368,11 +403,11 @@ export const ChatRowContent = ({
 							<span style={{ fontWeight: "bold" }}>
 								{message.type === "ask" ? (
 									<>
-										Zaki wants to search this directory for <code>{tool.regex}</code>:
+										Cline wants to search this directory for <code>{tool.regex}</code>:
 									</>
 								) : (
 									<>
-										Zaki searched this directory for <code>{tool.regex}</code>:
+										Cline searched this directory for <code>{tool.regex}</code>:
 									</>
 								)}
 							</span>
@@ -395,9 +430,9 @@ export const ChatRowContent = ({
 			// 				{isInspecting ? <ProgressIndicator /> : toolIcon("inspect")}
 			// 				<span style={{ fontWeight: "bold" }}>
 			// 					{message.type === "ask" ? (
-			// 						<>Zaki wants to inspect this website:</>
+			// 						<>Cline wants to inspect this website:</>
 			// 					) : (
-			// 						<>Zaki is inspecting this website:</>
+			// 						<>Cline is inspecting this website:</>
 			// 					)}
 			// 				</span>
 			// 			</div>
@@ -456,7 +491,13 @@ export const ChatRowContent = ({
 											<>
 												<br />
 												<br />
-												It seems like you're having Windows PowerShell issues, please install powershell 7.5
+												It seems like you're having Windows PowerShell issues, please see this{" "}
+												<a
+													href="https://github.com/cline/cline/wiki/TroubleShooting-%E2%80%90-%22PowerShell-is-not-recognized-as-an-internal-or-external-command%22"
+													style={{ color: "inherit", textDecoration: "underline" }}>
+													troubleshooting guide
+												</a>
+												.
 											</>
 										)}
 									</p>
@@ -598,11 +639,33 @@ export const ChatRowContent = ({
 									</span>
 								</div>
 								<div>
-									Zaki won't be able to view the command's output. Please update VSCode (
+									Cline won't be able to view the command's output. Please update VSCode (
 									<code>CMD/CTRL + Shift + P</code> → "Update") and make sure you're using a supported
 									shell: zsh, bash, fish, or PowerShell (<code>CMD/CTRL + Shift + P</code> →
-									"Terminal: Select Default Profile").
+									"Terminal: Select Default Profile").{" "}
+									<a
+										href="https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Shell-Integration-Unavailable"
+										style={{ color: "inherit", textDecoration: "underline" }}>
+										Still having trouble?
+									</a>
 								</div>
+							</div>
+						</>
+					)
+				case "mcp_server_response":
+					return (
+						<>
+							<div style={{ paddingTop: 0 }}>
+								<div
+									style={{
+										marginBottom: "4px",
+										opacity: 0.8,
+										fontSize: "12px",
+										textTransform: "uppercase",
+									}}>
+									Response
+								</div>
+								<CodeBlock source={`${"```"}json\n${message.text}\n${"```"}`} />
 							</div>
 						</>
 					)
@@ -701,6 +764,73 @@ export const ChatRowContent = ({
 										</div>
 										{isExpanded && <CodeBlock source={`${"```"}shell\n${output}\n${"```"}`} />}
 									</div>
+								)}
+							</div>
+						</>
+					)
+				case "use_mcp_server":
+					const useMcpServer = JSON.parse(message.text || "{}") as ClineAskUseMcpServer
+					const server = mcpServers.find((server) => server.name === useMcpServer.serverName)
+					return (
+						<>
+							<div style={headerStyle}>
+								{icon}
+								{title}
+							</div>
+
+							<div
+								style={{
+									background: "var(--vscode-textCodeBlock-background)",
+									borderRadius: "3px",
+									padding: "8px 10px",
+									marginTop: "8px",
+								}}>
+								{useMcpServer.type === "access_mcp_resource" && (
+									<McpResourceRow
+										item={{
+											// Always use the actual URI from the request
+											uri: useMcpServer.uri || "",
+											// Use the matched resource/template details, with fallbacks
+											...(findMatchingResourceOrTemplate(
+												useMcpServer.uri || "",
+												server?.resources,
+												server?.resourceTemplates,
+											) || {
+												name: "",
+												mimeType: "",
+												description: "",
+											}),
+										}}
+									/>
+								)}
+
+								{useMcpServer.type === "use_mcp_tool" && (
+									<>
+										<McpToolRow
+											tool={{
+												name: useMcpServer.toolName || "",
+												description:
+													server?.tools?.find((tool) => tool.name === useMcpServer.toolName)
+														?.description || "",
+											}}
+										/>
+										{useMcpServer.arguments && (
+											<div style={{ marginTop: "6px" }}>
+												<div
+													style={{
+														marginBottom: "4px",
+														opacity: 0.8,
+														fontSize: "11px",
+														textTransform: "uppercase",
+													}}>
+													Arguments
+												</div>
+												<CodeBlock
+													source={`${"```"}json\n${useMcpServer.arguments}\n${"```"}`}
+												/>
+											</div>
+										)}
+									</>
 								)}
 							</div>
 						</>

@@ -58,6 +58,10 @@ export const toolDescription = function (block: ToolUse) {
             return `[${block.name} for '${block.params.question}']`
         case "attempt_completion":
             return `[${block.name}]`
+        case "use_mcp_tool":
+            return `[${block.name} for '${block.params.tool_name}' on server '${block.params.server_name}']`
+        case "access_mcp_resource":
+            return `[${block.name} for '${block.params.uri}' on server '${block.params.server_name}']`
     }
 }
 

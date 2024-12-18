@@ -1,6 +1,7 @@
 import axios from "axios"
 import * as path from "path"
 import * as vscode from "vscode"
+import * as fs from "fs/promises"
 import { ApiProvider, ModelInfo } from "../../../shared/api"
 import { readJsonFile, writeJsonFile, ensureJsonDirectory } from "../../../utils/json-storage"
 import { buildApiHandler } from "../../../api"
@@ -73,10 +74,16 @@ export class ApiProviderManager {
         return { apiKey, provider: openrouter }
     }
 
-    async ensureCacheDirectoryExists(): Promise<string> {
+    private async ensureCacheDirectoryExists(): Promise<string> {
         const cacheDir = path.join(this.globalStoragePath, "cache")
         await ensureJsonDirectory(cacheDir)
         return cacheDir
+    }
+
+    async ensureSettingsDirectoryExists(): Promise<string> {
+        const settingsDir = path.join(this.globalStoragePath, "settings")
+        await fs.mkdir(settingsDir, { recursive: true })
+        return settingsDir
     }
 
     getCachePath(): string {

@@ -9,6 +9,7 @@ import {
 	ClineApiReqCancelReason,
 	ClineApiReqInfo,
 	ClineAsk,
+    ClineAskUseMcpServer,
 	ClineMessage,
 	ClineSay,
 	ClineSayBrowserAction,

@@ -7,6 +7,8 @@ import pWaitFor from "p-wait-for"
 import * as path from "path"
 import { serializeError } from "serialize-error"
 import * as vscode from "vscode"
+import { UseMcpToolToolUse, AccessMcpResourceToolUse } from "../assistant-message"
+
 
 import { ApiHandler, buildApiHandler } from "../../api"
 import { ApiStream } from "../../api/transform/stream"
@@ -72,6 +74,8 @@ import { browser_action } from "./tools/browser_action"
 import { execute_command } from "./tools/execute_command"
 import { ask_followup_question } from "./tools/ask_followup_question"
 import { attempt_completion } from "./tools/attempt_completion"
+import { use_mcp_tool } from "./tools/use_mcp_tool"
+import { access_mcp_resource } from "./tools/access_mcp_resource"
 
 export class Cline {
     public cwd = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).at(0) ?? path.join(os.homedir(), "Desktop")
@@ -246,6 +250,10 @@ export class Cline {
                             return `[${block.name} for '${block.params.regex}'${
                                 block.params.file_pattern ? ` in '${block.params.file_pattern}'` : ""
                             }]`
+                        case "use_mcp_tool":
+                            return `[${block.name} for '${block.params.server_name}']`
+                        case "access_mcp_resource":
+                            return `[${block.name} for '${block.params.server_name}']`
                         case "list_files":
                             return `[${block.name} for '${block.params.path}']`
                         case "list_code_definition_names":
@@ -327,6 +335,12 @@ export class Cline {
                         break
                     case "ask_followup_question":
                         result = await ask_followup_question.call(this, block)
+                        break
+                    case "use_mcp_tool":
+                        result = await use_mcp_tool.call(this, block as UseMcpToolToolUse)
+                        break
+                    case "access_mcp_resource":
+                        result = await access_mcp_resource.call(this, block as AccessMcpResourceToolUse)
                         break
                     case "attempt_completion":
                         result = await attempt_completion.call(this, block)
