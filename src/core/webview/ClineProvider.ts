@@ -104,11 +104,6 @@ export class ClineProvider implements vscode.WebviewViewProvider {
         this.webviewManager.setupWebview(webviewView)
         this.setWebviewMessageListener(webviewView.webview)
 
-        // Initialize MCP servers and notify webview immediately after setup
-        if (this.mcpHub) {
-            await this.mcpHub.initialize()
-        }
-
         webviewView.onDidDispose(
             async () => {
                 await this.dispose()

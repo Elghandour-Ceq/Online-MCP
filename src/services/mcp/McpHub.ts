@@ -25,6 +25,7 @@ import {
 } from "../../shared/mcp"
 import { fileExistsAtPath } from "../../utils/fs"
 import { arePathsEqual } from "../../utils/path"
+import os from "os"
 
 export type McpConnection = {
 	server: McpServer
@@ -54,7 +55,10 @@ export class McpHub {
 	constructor(provider: ClineProvider) {
 		this.providerRef = new WeakRef(provider)
 		this.watchMcpSettingsFile()
-		// Remove initialization from constructor
+		// Initialize MCP servers when the hub is created
+		this.initialize().catch(error => {
+			console.error("Failed to initialize MCP servers:", error)
+		})
 	}
 
 	getServers(): McpServer[] {
@@ -68,6 +72,65 @@ export class McpHub {
 		}
 		const mcpServersPath = await provider.apiProviderManager.ensureMcpServersDirectoryExists()
 		return mcpServersPath
+	}
+
+	private async getZakiMcpPath(): Promise<string> {
+		return path.join(os.homedir(), "Documents", "ZAKI", "MCP")
+	}
+
+	private async scanZakiMcpDirectory(): Promise<Record<string, StdioServerParameters>> {
+		const mcpPath = await this.getZakiMcpPath()
+		const servers: Record<string, StdioServerParameters> = {}
+
+		try {
+			// Ensure directory exists
+			await fs.mkdir(mcpPath, { recursive: true })
+
+			// Read all subdirectories
+			const entries = await fs.readdir(mcpPath, { withFileTypes: true })
+			for (const entry of entries) {
+				if (entry.isDirectory()) {
+					const serverPath = path.join(mcpPath, entry.name)
+					const buildIndexPath = path.join(serverPath, "build", "index.js")
+
+					// Check if build/index.js exists
+					try {
+						await fs.access(buildIndexPath)
+						// Add server to config if build/index.js exists
+						servers[entry.name] = {
+							command: "node",
+							args: [buildIndexPath],
+							env: {}
+						}
+					} catch {
+						// Skip if build/index.js doesn't exist
+						continue
+					}
+				}
+			}
+		} catch (error) {
+			console.error("Failed to scan ZAKI/MCP directory:", error)
+		}
+
+		return servers
+	}
+
+	private async updateSettingsWithNewServers(newServers: Record<string, StdioServerParameters>): Promise<void> {
+		const settingsPath = await this.getMcpSettingsFilePath()
+		const content = await fs.readFile(settingsPath, "utf-8")
+		const config = JSON.parse(content)
+
+		let hasChanges = false
+		for (const [name, serverConfig] of Object.entries(newServers)) {
+			if (!config.mcpServers[name]) {
+				config.mcpServers[name] = serverConfig
+				hasChanges = true
+			}
+		}
+
+		if (hasChanges) {
+			await fs.writeFile(settingsPath, JSON.stringify(config, null, 2))
+		}
 	}
 
 	async getMcpSettingsFilePath(): Promise<string> {
@@ -127,6 +190,13 @@ export class McpHub {
 
 	public async initialize(): Promise<void> {
 		try {
+			// First scan ZAKI/MCP directory for servers
+			const newServers = await this.scanZakiMcpDirectory()
+			
+			// Update settings file with any new servers found
+			await this.updateSettingsWithNewServers(newServers)
+
+			// Read updated settings and start all servers
 			const settingsPath = await this.getMcpSettingsFilePath()
 			const content = await fs.readFile(settingsPath, "utf-8")
 			const config = JSON.parse(content)
