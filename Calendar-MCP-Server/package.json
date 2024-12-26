@@ -1,0 +1,47 @@
+{
+  "name": "@gongrzhe/server-calendar-mcp",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol server for Google Calendar integration",
+  "main": "build/index.js",
+  "type": "module",
+  "bin": {
+    "calendar-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "build",
+    "README.md"
+  ],
+  "keywords": [
+    "calendar",
+    "events",
+    "scheduling",
+    "mcp",
+    "model-context-protocol",
+    "google-calendar",
+    "claude",
+    "cursor"
+  ],
+  "author": "gongrzhe",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/Calendar-MCP-Server"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "googleapis": "^133.0.0",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.22.4"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
