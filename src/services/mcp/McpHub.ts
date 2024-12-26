@@ -1,5 +1,3 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { StdioClientTransport, StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js"
 import {
     CallToolResultSchema,
     ListResourcesResultSchema,
@@ -7,6 +5,8 @@ import {
     ListToolsResultSchema,
     ReadResourceResultSchema,
 } from "@modelcontextprotocol/sdk/types.js"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { StdioClientTransport, StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js"
 import chokidar, { FSWatcher } from "chokidar"
 import delay from "delay"
 import deepEqual from "fast-deep-equal"
@@ -61,71 +61,10 @@ export class McpHub {
         this.providerRef = new WeakRef(provider)
         this.credentialsManager = SecureCredentialsManager.getInstance(provider.context)
         this.watchMcpSettingsFile()
+        this.registerCommands()
         this.initialize().catch(error => {
             console.error("Failed to initialize MCP servers:", error)
         })
-    }
-
-    private async showCredentialStructure(serverPath: string): Promise<void> {
-        const serverName = path.basename(serverPath);
-        const isOnline = serverPath.includes('mcp-online');
-        const serverKey = isOnline ? `online-${serverName}` : serverName;
-        const buildIndexPath = path.join(serverPath, "build", "index.js");
-        const envExamplePath = path.join(serverPath, '.env.example');
-
-        try {
-            const envExample = await fs.readFile(envExamplePath, 'utf-8');
-            const requiredVars = envExample
-                .split('\n')
-                .map(line => line.trim())
-                .filter(line => line && !line.startsWith('#'))
-                .map(line => line.split('=')[0]);
-
-            const sampleEnv = Object.fromEntries(
-                requiredVars.map(varName => [varName, `your-${varName.toLowerCase()}`])
-            );
-
-            const sampleConfig = {
-                mcpServers: {
-                    [serverKey]: {
-                        command: "node",
-                        args: [buildIndexPath],
-                        env: sampleEnv
-                    }
-                }
-            };
-
-            const settingsPath = await this.getMcpSettingsFilePath();
-            vscode.window.showInformationMessage(
-                `Add your credentials to: ${settingsPath}\n\nStructure example:\n${JSON.stringify(sampleConfig, null, 2)}`
-            );
-
-        } catch (error) {
-            console.error(`Failed to show credential structure for ${serverName}:`, error);
-        }
-    }
-
-    private async promptForCredentials(serverPath: string): Promise<Record<string, string>> {
-        const envExamplePath = path.join(serverPath, '.env.example');
-        const serverName = path.basename(serverPath);
-    
-        try {
-            // Show the credential structure first
-            await this.showCredentialStructure(serverPath);
-
-            // Then proceed with normal credential handling
-            const envExample = await fs.readFile(envExamplePath, 'utf-8');
-            const requiredVars = envExample
-                .split('\n')
-                .map(line => line.trim())
-                .filter(line => line && !line.startsWith('#'))
-                .map(line => line.split('=')[0]);
-
-            return await this.credentialsManager.promptAndStoreCredentials(serverName, requiredVars);
-        } catch (error) {
-            console.error(`Failed to handle credentials for ${serverName}:`, error);
-            return {};
-        }
     }
 
     getServers(): McpServer[] {
@@ -296,6 +235,34 @@ export class McpHub {
         return mcpSettingsFilePath
     }
 
+    private async promptForCredentials(serverPath: string): Promise<Record<string, string>> {
+        try {
+            const configPath = path.join(serverPath, '.env.example');
+            const envExists = await fs.access(configPath).then(() => true).catch(() => false);
+            
+            if (!envExists) {
+                return {};
+            }
+    
+            const content = await fs.readFile(configPath, 'utf-8');
+            const requiredVars = content
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('#'))
+                .map(line => line.split('=')[0]);
+    
+            if (requiredVars.length === 0) {
+                return {};
+            }
+    
+            const serverName = path.basename(serverPath);
+            return await this.credentialsManager.promptAndStoreCredentials(serverName, requiredVars);
+        } catch (error) {
+            console.error('Error reading credentials:', error);
+            return {};
+        }
+    }
+
     private async updateSettingsWithNewServers(newServers: Record<string, StdioServerParameters>): Promise<void> {
         const settingsPath = await this.getMcpSettingsFilePath()
         const content = await fs.readFile(settingsPath, "utf-8")
@@ -336,11 +303,21 @@ export class McpHub {
                         return
                     }
                     try {
+                        // Update secure storage with new credentials from settings
+                        for (const [name, serverConfig] of Object.entries(result.data.mcpServers)) {
+                            if (serverConfig.env) {
+                                await this.credentialsManager.setCredentials(name, serverConfig.env);
+                            }
+                        }
+    
                         vscode.window.showInformationMessage("Updating MCP servers...")
                         await this.updateServerConnections(result.data.mcpServers || {})
-                        vscode.window.showInformationMessage("MCP servers updated")
+                        
+                        // Reload window after successful update
+                        await vscode.commands.executeCommand('workbench.action.reloadWindow');
                     } catch (error) {
                         console.error("Failed to process MCP settings change:", error)
+                        vscode.window.showErrorMessage(`Failed to update MCP servers: ${error}`)
                     }
                 }
             }),
@@ -659,6 +636,51 @@ export class McpHub {
             },
             CallToolResultSchema,
         )
+    }
+
+    // Add method to update credentials for a specific server
+    public async updateServerCredentials(serverName: string): Promise<void> {
+        const connection = this.connections.find((conn) => conn.server.name === serverName);
+        if (!connection) {
+            throw new Error(`Server ${serverName} not found`);
+        }
+
+        try {
+            // Get required variables from current config
+            const config = JSON.parse(connection.server.config);
+            const currentEnv = config.env || {};
+            const requiredVars = Object.keys(currentEnv);
+
+            // Prompt for new credentials
+            const newCredentials = await this.credentialsManager.promptAndStoreCredentials(serverName, requiredVars);
+
+            // Update the server config with new credentials
+            config.env = newCredentials;
+            
+            // Update settings file
+            const settingsPath = await this.getMcpSettingsFilePath();
+            const settingsContent = await fs.readFile(settingsPath, "utf-8");
+            const settings = JSON.parse(settingsContent);
+            settings.mcpServers[serverName] = config;
+            await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+
+            // Restart the server with new credentials
+            await this.restartConnection(serverName);
+            
+            vscode.window.showInformationMessage(`Updated credentials for ${serverName}`);
+        } catch (error) {
+            console.error(`Failed to update credentials for ${serverName}:`, error);
+            vscode.window.showErrorMessage(`Failed to update credentials for ${serverName}`);
+        }
+    }
+
+    // Add context menu command registration
+    private registerCommands(): void {
+        this.disposables.push(
+            vscode.commands.registerCommand('mcp.updateCredentials', async (serverName: string) => {
+                await this.updateServerCredentials(serverName);
+            })
+        );
     }
 
     async dispose(): Promise<void> {

@@ -26,67 +26,26 @@ export class SecureCredentialsManager {
         return `${this.PREFIX}${serverId}`;
     }
 
-    private async getCredentialInstructions(credentialType: string): Promise<string> {
-        const instructions: Record<string, string> = {
-            // Google Calendar credentials
-            'GOOGLE_CLIENT_ID': [
-                'To get Google Calendar Client ID:',
-                '1. Go to https://console.cloud.google.com',
-                '2. Create a new project or select existing one',
-                '3. Enable Google Calendar API',
-                '4. Go to Credentials > Create Credentials > OAuth client ID',
-                '5. Application type: Web application',
-                '6. Add redirect URI: http://localhost:3000/oauth2callback',
-                '7. Copy the Client ID'
-            ].join('\n'),
+    private async showCredentialInstructions(varName: string): Promise<void> {
+        // Generic instructions based on credential type
+        let instructions = '';
+        
+        if (varName.toLowerCase().includes('token')) {
+            instructions = 'Please enter your API token or access token';
+        } else if (varName.toLowerCase().includes('key')) {
+            instructions = 'Please enter your API key or client key';
+        } else if (varName.toLowerCase().includes('secret')) {
+            instructions = 'Please enter your client secret or API secret';
+        } else if (varName.toLowerCase().includes('email')) {
+            instructions = 'Please enter your email address';
+        } else if (varName.toLowerCase().includes('domain')) {
+            instructions = 'Please enter your domain name';
+        } else if (varName.toLowerCase().includes('url')) {
+            instructions = 'Please enter the URL';
+        } else {
+            instructions = `Please enter the value for ${varName}`;
+        }
 
-            'GOOGLE_CLIENT_SECRET': [
-                'To get Google Calendar Client Secret:',
-                '1. Go to https://console.cloud.google.com',
-                '2. Select your project',
-                '3. Go to Credentials',
-                '4. Find your OAuth 2.0 Client ID',
-                '5. Copy the Client Secret'
-            ].join('\n'),
-
-            'GOOGLE_REFRESH_TOKEN': [
-                'To get Google Calendar Refresh Token:',
-                '1. Make sure you have Client ID and Secret',
-                '2. Run the helper script:',
-                '   node src/services/mcp/scripts/get-google-refresh-token.js',
-                '3. Follow the browser authentication flow',
-                '4. Copy the provided refresh token'
-            ].join('\n'),
-
-            // Jira credentials
-            'JIRA_API_TOKEN': [
-                'To get Jira API Token:',
-                '1. Go to https://id.atlassian.com/manage-profile/security/api-tokens',
-                '2. Click "Create API token"',
-                '3. Give it a name (e.g., "MCP Integration")',
-                '4. Copy the generated token'
-            ].join('\n'),
-
-            'JIRA_EMAIL': [
-                'Enter your Atlassian account email address',
-                'This is the email you use to log into Jira'
-            ].join('\n'),
-
-            'JIRA_DOMAIN': [
-                'Enter your Jira domain',
-                'Format: company.atlassian.net',
-                'This is the URL you use to access Jira'
-            ].join('\n'),
-
-            // Default instructions
-            'default': 'Please enter the required credential value'
-        };
-
-        return instructions[credentialType] || instructions['default'];
-    }
-
-    private async showCredentialInstructions(credentialType: string): Promise<void> {
-        const instructions = await this.getCredentialInstructions(credentialType);
         await vscode.window.showInformationMessage(instructions, { modal: true });
     }
 
@@ -94,7 +53,13 @@ export class SecureCredentialsManager {
         // Check for existing credentials first
         const existingCreds = await this.getCredentials(serverId);
         if (existingCreds) {
-            return existingCreds;
+            // If credentials exist, ask if user wants to update them
+            const update = await vscode.window.showQuickPick(['Yes', 'No'], {
+                placeHolder: `Credentials already exist for ${serverId}. Do you want to update them?`
+            });
+            if (update !== 'Yes') {
+                return existingCreds;
+            }
         }
 
         const credentials: ServerCredentials = {};
@@ -109,6 +74,7 @@ export class SecureCredentialsManager {
                 ignoreFocusOut: true,
                 title: `${serverId} Credentials`,
                 placeHolder: `Enter your ${varName}`,
+                value: existingCreds?.[varName] || '', // Show existing value if updating
             });
             
             if (!value) {
@@ -122,21 +88,24 @@ export class SecureCredentialsManager {
         await this.setCredentials(serverId, credentials);
 
         // Create temporary .env file for backward compatibility
-        if (serverId.includes('jira-server') || serverId.includes('Calendar-MCP-Server')) {
-            const envPath = path.join(process.env.HOME || '', 'Documents', 'ZAKI', 
-                serverId.includes('online') ? 'mcp-online' : 'MCP',
-                serverId.replace('online-', ''),
-                '.env'
-            );
+        const envPath = this.getEnvPath(serverId);
+        const envContent = Object.entries(credentials)
+            .map(([key, value]) => `${key}=${value}`)
+            .join('\n');
             
-            const envContent = Object.entries(credentials)
-                .map(([key, value]) => `${key}=${value}`)
-                .join('\n');
-                
-            await fs.writeFile(envPath, envContent);
-        }
+        await fs.writeFile(envPath, envContent);
 
         return credentials;
+    }
+
+    private getEnvPath(serverId: string): string {
+        // Generic path construction based on server ID
+        const basePath = path.join(process.env.HOME || '', 'Documents', 'ZAKI');
+        const isOnline = serverId.startsWith('online-');
+        const serverDir = isOnline ? 'mcp-online' : 'MCP';
+        const serverName = isOnline ? serverId.replace('online-', '') : serverId;
+        
+        return path.join(basePath, serverDir, serverName, '.env');
     }
 
     private isSecret(varName: string): boolean {
@@ -174,6 +143,14 @@ export class SecureCredentialsManager {
     public async clearCredentials(serverId: string): Promise<void> {
         const key = this.getKey(serverId);
         await this.secretStorage.delete(key);
+
+        // Also remove .env file if it exists
+        try {
+            const envPath = this.getEnvPath(serverId);
+            await fs.unlink(envPath);
+        } catch {
+            // Ignore error if file doesn't exist
+        }
     }
 
     public async clearAllCredentials(): Promise<void> {
