@@ -1,0 +1,21 @@
+{
+  "name": "list-jira-tickets",
+  "version": "0.1.0",
+  "description": "MCP server to list Jira tickets",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc && chmod +x build/index.js",
+    "watch": "tsc --watch",
+    "start": "node build/index.js"
+  },
+  "devDependencies": {
+    "@types/jira-client": "^7.1.9",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "jira-client": "^8.2.2"
+  }
+}
