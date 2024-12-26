@@ -26,6 +26,10 @@ import {
 import { fileExistsAtPath } from "../../utils/fs"
 import { arePathsEqual } from "../../utils/path"
 import os from "os"
+import { exec } from "child_process"
+import { promisify } from "util"
+
+const execAsync = promisify(exec)
 
 export type McpConnection = {
 	server: McpServer
@@ -78,38 +82,203 @@ export class McpHub {
 		return path.join(os.homedir(), "Documents", "ZAKI", "MCP")
 	}
 
-	private async scanZakiMcpDirectory(): Promise<Record<string, StdioServerParameters>> {
-		const mcpPath = await this.getZakiMcpPath()
-		const servers: Record<string, StdioServerParameters> = {}
+	private async getOnlineMcpPath(): Promise<string> {
+		return path.join(os.homedir(), "Documents", "ZAKI", "mcp-online")
+	}
 
+	private async buildServer(serverPath: string): Promise<void> {
+		console.log(`Building server at ${serverPath}...`)
 		try {
-			// Ensure directory exists
-			await fs.mkdir(mcpPath, { recursive: true })
+			// First install dependencies
+			await execAsync('npm install', { cwd: serverPath })
+			// Then build the server
+			await execAsync('npm run build', { cwd: serverPath })
+			console.log(`Successfully built server at ${serverPath}`)
+		} catch (error) {
+			console.error(`Failed to build server at ${serverPath}:`, error)
+			throw error
+		}
+	}
 
-			// Read all subdirectories
-			const entries = await fs.readdir(mcpPath, { withFileTypes: true })
+	private async buildOnlineMcpServers(onlineMcpPath: string): Promise<void> {
+		try {
+			// Get list of all directories
+			const entries = await fs.readdir(onlineMcpPath, { withFileTypes: true })
+			const serverDirs = []
+	
+			// Check each directory for package.json
 			for (const entry of entries) {
 				if (entry.isDirectory()) {
-					const serverPath = path.join(mcpPath, entry.name)
-					const buildIndexPath = path.join(serverPath, "build", "index.js")
-
-					// Check if build/index.js exists
+					const serverPath = path.join(onlineMcpPath, entry.name)
+					const packageJsonPath = path.join(serverPath, "package.json")
+					
 					try {
-						await fs.access(buildIndexPath)
-						// Add server to config if build/index.js exists
-						servers[entry.name] = {
-							command: "node",
-							args: [buildIndexPath],
-							env: {}
+						// Check if package.json exists
+						await fs.access(packageJsonPath)
+						
+						// Read package.json to verify it's an MCP server
+						const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'))
+						
+						// Check if it has MCP SDK dependency
+						if (packageJson.dependencies?.["@modelcontextprotocol/sdk"]) {
+							serverDirs.push(entry)
 						}
-					} catch {
-						// Skip if build/index.js doesn't exist
+					} catch (error) {
+						// Skip if package.json doesn't exist or can't be read
+						console.error(`Failed to parse package.json for ${entry.name}:`, error)
 						continue
 					}
 				}
 			}
+	
+			// Build each detected MCP server
+			for (const dir of serverDirs) {
+				const serverPath = path.join(onlineMcpPath, dir.name)
+				try {
+					await this.buildServer(serverPath)
+					vscode.window.showInformationMessage(`Successfully built ${dir.name}`)
+				} catch (error) {
+					vscode.window.showErrorMessage(`Failed to build ${dir.name}: ${error}`)
+				}
+			}
 		} catch (error) {
-			console.error("Failed to scan ZAKI/MCP directory:", error)
+			console.error("Failed to build online MCP servers:", error)
+			throw error
+		}
+	}
+
+	private async ensureOnlineMcpRepo(): Promise<void> {
+		const onlineMcpPath = await this.getOnlineMcpPath()
+		let needsBuild = false
+
+		try {
+			// Check if directory exists
+			await fs.access(onlineMcpPath)
+			// If exists, check for updates
+			console.log("Checking for Online-MCP updates...")
+			const { stdout } = await execAsync('git fetch && git status -uno', { cwd: onlineMcpPath })
+			if (stdout.includes('behind')) {
+				// Changes available, pull and rebuild
+				console.log("Updates available, pulling changes...")
+				await execAsync('git pull', { cwd: onlineMcpPath })
+				needsBuild = true
+				vscode.window.showInformationMessage("Online MCP servers updated, rebuilding...")
+			}
+		} catch {
+			// If doesn't exist, clone the repo
+			console.log("Cloning Online-MCP repository...")
+			const parentDir = path.dirname(onlineMcpPath)
+			await fs.mkdir(parentDir, { recursive: true })
+			await execAsync(`git clone https://github.com/Elghandour-Ceq/Online-MCP.git ${onlineMcpPath}`)
+			needsBuild = true
+			vscode.window.showInformationMessage("Online MCP servers cloned, building...")
+		}
+
+		// Build servers if needed
+		if (needsBuild) {
+			await this.buildOnlineMcpServers(onlineMcpPath)
+		}
+	}
+
+	private async promptForCredentials(serverPath: string): Promise<Record<string, string>> {
+		// Check if .env.example exists
+		const envExamplePath = path.join(serverPath, '.env.example')
+		try {
+			const envExample = await fs.readFile(envExamplePath, 'utf-8')
+			const requiredEnvVars = envExample
+				.split('\n')
+				.map(line => line.trim())
+				.filter(line => line && !line.startsWith('#'))
+				.map(line => line.split('=')[0])
+
+			const credentials: Record<string, string> = {}
+			
+			for (const envVar of requiredEnvVars) {
+				const value = await vscode.window.showInputBox({
+					prompt: `Please enter value for ${envVar}`,
+					password: envVar.toLowerCase().includes('key') || 
+							 envVar.toLowerCase().includes('token') || 
+							 envVar.toLowerCase().includes('secret'),
+				})
+				if (value) {
+					credentials[envVar] = value
+				}
+			}
+
+			// Save credentials to .env file
+			const envContent = Object.entries(credentials)
+				.map(([key, value]) => `${key}=${value}`)
+				.join('\n')
+			await fs.writeFile(path.join(serverPath, '.env'), envContent)
+
+			return credentials
+		} catch {
+			return {}
+		}
+	}
+
+	private async scanZakiMcpDirectory(): Promise<Record<string, StdioServerParameters>> {
+		const mcpPath = await this.getZakiMcpPath()
+		const onlineMcpPath = await this.getOnlineMcpPath()
+		const servers: Record<string, StdioServerParameters> = {}
+
+		try {
+			// Ensure directories exist
+			await fs.mkdir(mcpPath, { recursive: true })
+			
+			// First ensure/update online MCP repository
+			await this.ensureOnlineMcpRepo()
+
+			// Scan local MCP directory
+			const scanDirectory = async (dirPath: string, isOnline: boolean) => {
+				const entries = await fs.readdir(dirPath, { withFileTypes: true })
+				for (const entry of entries) {
+					if (entry.isDirectory()) {
+						const serverPath = path.join(dirPath, entry.name)
+						const buildIndexPath = path.join(serverPath, "build", "index.js")
+						const envPath = path.join(serverPath, ".env")
+
+						try {
+							await fs.access(buildIndexPath)
+							
+							// Check if server needs credentials
+							let env = {}
+							try {
+								await fs.access(envPath)
+								// If .env exists, read it
+								const envContent = await fs.readFile(envPath, 'utf-8')
+								env = Object.fromEntries(
+									envContent
+										.split('\n')
+										.filter(line => line.includes('='))
+										.map(line => line.split('='))
+								)
+							} catch {
+								// If .env doesn't exist but .env.example does, prompt for credentials
+								env = await this.promptForCredentials(serverPath)
+							}
+
+							// Add server to config
+							const serverKey = isOnline ? `online-${entry.name}` : entry.name
+							servers[serverKey] = {
+								command: "node",
+								args: [buildIndexPath],
+								env
+							}
+						} catch {
+							// Skip if build/index.js doesn't exist
+							continue
+						}
+					}
+				}
+			}
+
+			// Scan both directories
+			await scanDirectory(mcpPath, false)
+			await scanDirectory(onlineMcpPath, true)
+
+		} catch (error) {
+			console.error("Failed to scan MCP directories:", error)
 		}
 
 		return servers
@@ -122,7 +291,7 @@ export class McpHub {
 
 		let hasChanges = false
 		for (const [name, serverConfig] of Object.entries(newServers)) {
-			if (!config.mcpServers[name]) {
+			if (!config.mcpServers[name] || !deepEqual(config.mcpServers[name], serverConfig)) {
 				config.mcpServers[name] = serverConfig
 				hasChanges = true
 			}
@@ -130,6 +299,7 @@ export class McpHub {
 
 		if (hasChanges) {
 			await fs.writeFile(settingsPath, JSON.stringify(config, null, 2))
+			vscode.window.showInformationMessage("MCP settings updated with new/changed servers")
 		}
 	}
 
@@ -190,7 +360,7 @@ export class McpHub {
 
 	public async initialize(): Promise<void> {
 		try {
-			// First scan ZAKI/MCP directory for servers
+			// First scan both local and online MCP directories for servers
 			const newServers = await this.scanZakiMcpDirectory()
 			
 			// Update settings file with any new servers found
@@ -208,11 +378,10 @@ export class McpHub {
 	}
 
 	private async connectToServer(name: string, config: StdioServerParameters): Promise<void> {
-		// Remove existing connection if it exists (should never happen, the connection should be deleted beforehand)
+		// Remove existing connection if it exists
 		this.connections = this.connections.filter((conn) => conn.server.name !== name)
 
 		try {
-			// Each MCP server requires its own transport connection and has unique capabilities, configurations, and error handling. Having separate clients also allows proper scoping of resources/tools and independent server management like reconnection.
 			const client = new Client(
 				{
 					name: "Cline",
@@ -229,9 +398,8 @@ export class McpHub {
 				env: {
 					...config.env,
 					...(process.env.PATH ? { PATH: process.env.PATH } : {}),
-					// ...(process.env.NODE_PATH ? { NODE_PATH: process.env.NODE_PATH } : {}),
 				},
-				stderr: "pipe", // necessary for stderr to be available
+				stderr: "pipe",
 			})
 
 			transport.onerror = async (error) => {
@@ -252,7 +420,6 @@ export class McpHub {
 				await this.notifyWebviewOfServerChanges()
 			}
 
-			// If the config is invalid, show an error
 			if (!StdioConfigSchema.safeParse(config).success) {
 				console.error(`Invalid config for "${name}": missing or invalid parameters`)
 				const connection: McpConnection = {
@@ -269,7 +436,6 @@ export class McpHub {
 				return
 			}
 
-			// valid schema
 			const connection: McpConnection = {
 				server: {
 					name,
@@ -281,8 +447,6 @@ export class McpHub {
 			}
 			this.connections.push(connection)
 
-			// transport.stderr is only available after the process has been started. However we can't start it separately from the .connect() call because it also starts the transport. And we can't place this after the connect call since we need to capture the stderr stream before the connection is established, in order to capture errors during the connection process.
-			// As a workaround, we start the transport ourselves, and then monkey-patch the start method to no-op so that .connect() doesn't try to start it again.
 			await transport.start()
 			const stderrStream = transport.stderr
 			if (stderrStream) {
@@ -300,19 +464,16 @@ export class McpHub {
 			} else {
 				console.error(`No stderr stream for ${name}`)
 			}
-			transport.start = async () => {} // No-op now, .connect() won't fail
+			transport.start = async () => {}
 
-			// Connect
 			await client.connect(transport)
 			connection.server.status = "connected"
 			connection.server.error = ""
 
-			// Initial fetch of tools and resources
 			connection.server.tools = await this.fetchToolsList(name)
 			connection.server.resources = await this.fetchResourcesList(name)
 			connection.server.resourceTemplates = await this.fetchResourceTemplatesList(name)
 		} catch (error) {
-			// Update status with error
 			const connection = this.connections.find((conn) => conn.server.name === name)
 			if (connection) {
 				connection.server.status = "disconnected"
@@ -324,7 +485,7 @@ export class McpHub {
 
 	private appendErrorMessage(connection: McpConnection, error: string) {
 		const newError = connection.server.error ? `${connection.server.error}\n${error}` : error
-		connection.server.error = newError //.slice(0, 800)
+		connection.server.error = newError
 	}
 
 	private async fetchToolsList(serverName: string): Promise<McpTool[]> {
@@ -334,7 +495,6 @@ export class McpHub {
 				?.client.request({ method: "tools/list" }, ListToolsResultSchema)
 			return response?.tools || []
 		} catch (error) {
-			// console.error(`Failed to fetch tools for ${serverName}:`, error)
 			return []
 		}
 	}
@@ -346,7 +506,6 @@ export class McpHub {
 				?.client.request({ method: "resources/list" }, ListResourcesResultSchema)
 			return response?.resources || []
 		} catch (error) {
-			// console.error(`Failed to fetch resources for ${serverName}:`, error)
 			return []
 		}
 	}
@@ -358,7 +517,6 @@ export class McpHub {
 				?.client.request({ method: "resources/templates/list" }, ListResourceTemplatesResultSchema)
 			return response?.resourceTemplates || []
 		} catch (error) {
-			// console.error(`Failed to fetch resource templates for ${serverName}:`, error)
 			return []
 		}
 	}
@@ -382,7 +540,6 @@ export class McpHub {
 		const currentNames = new Set(this.connections.map((conn) => conn.server.name))
 		const newNames = new Set(Object.keys(newServers))
 
-		// Delete removed servers
 		for (const name of currentNames) {
 			if (!newNames.has(name)) {
 				await this.deleteConnection(name)
@@ -390,12 +547,10 @@ export class McpHub {
 			}
 		}
 
-		// Update or add servers
 		for (const [name, config] of Object.entries(newServers)) {
 			const currentConnection = this.connections.find((conn) => conn.server.name === name)
 
 			if (!currentConnection) {
-				// New server
 				try {
 					this.setupFileWatcher(name, config)
 					await this.connectToServer(name, config)
@@ -403,7 +558,6 @@ export class McpHub {
 					console.error(`Failed to connect to new MCP server ${name}:`, error)
 				}
 			} else if (!deepEqual(JSON.parse(currentConnection.server.config), config)) {
-				// Existing server with changed config
 				try {
 					this.setupFileWatcher(name, config)
 					await this.deleteConnection(name)
@@ -413,7 +567,6 @@ export class McpHub {
 					console.error(`Failed to reconnect MCP server ${name}:`, error)
 				}
 			}
-			// If server exists with same config, do nothing
 		}
 		await this.notifyWebviewOfServerChanges()
 		this.isConnecting = false
@@ -422,12 +575,7 @@ export class McpHub {
 	private setupFileWatcher(name: string, config: any) {
 		const filePath = config.args?.find((arg: string) => arg.includes("build/index.js"))
 		if (filePath) {
-			// we use chokidar instead of onDidSaveTextDocument because it doesn't require the file to be open in the editor. The settings config is better suited for onDidSave since that will be manually updated by the user or Cline (and we want to detect save events, not every file change)
-			const watcher = chokidar.watch(filePath, {
-				// persistent: true,
-				// ignoreInitial: true,
-				// awaitWriteFinish: true, // This helps with atomic writes
-			})
+			const watcher = chokidar.watch(filePath, {})
 
 			watcher.on("change", () => {
 				console.log(`Detected change in ${filePath}. Restarting server ${name}...`)
@@ -450,7 +598,6 @@ export class McpHub {
 			return
 		}
 
-		// Get existing connection and update its status
 		const connection = this.connections.find((conn) => conn.server.name === serverName)
 		const config = connection?.server.config
 		if (config) {
@@ -458,10 +605,9 @@ export class McpHub {
 			connection.server.status = "connecting"
 			connection.server.error = ""
 			await this.notifyWebviewOfServerChanges()
-			await delay(500) // artificial delay to show user that server is restarting
+			await delay(500)
 			try {
 				await this.deleteConnection(serverName)
-				// Try to connect again using existing config
 				await this.connectToServer(serverName, JSON.parse(config))
 				vscode.window.showInformationMessage(`${serverName} MCP server connected`)
 			} catch (error) {
@@ -475,7 +621,6 @@ export class McpHub {
 	}
 
 	public async notifyWebviewOfServerChanges(): Promise<void> {
-		// servers should always be sorted in the order they are defined in the settings file
 		const settingsPath = await this.getMcpSettingsFilePath()
 		const content = await fs.readFile(settingsPath, "utf-8")
 		const config = JSON.parse(content)
@@ -491,8 +636,6 @@ export class McpHub {
 				.map((connection) => connection.server),
 		})
 	}
-
-	// Using server
 
 	async readResource(serverName: string, uri: string): Promise<McpResourceResponse> {
 		const connection = this.connections.find((conn) => conn.server.name === serverName)
