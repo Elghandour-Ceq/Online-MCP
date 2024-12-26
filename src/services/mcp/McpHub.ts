@@ -141,29 +141,53 @@ export class McpHub {
 
     private async ensureOnlineMcpRepo(): Promise<void> {
         const onlineMcpPath = await this.getOnlineMcpPath()
-        let needsBuild = false
-
+        let needsRebuild = false
+    
         try {
-            await fs.access(onlineMcpPath)
-            console.log("Checking for Online-MCP updates...")
-            const { stdout } = await execAsync('git fetch && git status -uno', { cwd: onlineMcpPath })
-            if (stdout.includes('behind')) {
-                console.log("Updates available, pulling changes...")
-                await execAsync('git pull', { cwd: onlineMcpPath })
-                needsBuild = true
-                vscode.window.showInformationMessage("Online MCP servers updated, rebuilding...")
+            const exists = await fs.access(onlineMcpPath).then(() => true).catch(() => false)
+            
+            if (exists) {
+                console.log("Checking for Online-MCP updates...")
+                try {
+                    // Fetch latest changes without merging
+                    await execAsync('git fetch', { cwd: onlineMcpPath })
+                    
+                    // Check if local branch is different from remote
+                    const { stdout: status } = await execAsync('git status -uno', { cwd: onlineMcpPath })
+                    
+                    // Need to rebuild if:
+                    // - Branch is behind remote
+                    // - Branches have diverged
+                    // - Any other difference from remote state
+                    if (status.includes('behind') || status.includes('diverged') || status.includes('different commits')) {
+                        console.log("Updates detected, resetting to remote state...")
+                        // Remove directory and clone fresh to ensure clean state
+                        await fs.rm(onlineMcpPath, { recursive: true, force: true })
+                        needsRebuild = true
+                    } else {
+                        console.log("Online-MCP is up to date with remote")
+                        return
+                    }
+                } catch (error) {
+                    console.error("Error checking git status, will reclone:", error)
+                    await fs.rm(onlineMcpPath, { recursive: true, force: true })
+                    needsRebuild = true
+                }
+            } else {
+                needsRebuild = true
             }
-        } catch {
-            console.log("Cloning Online-MCP repository...")
-            const parentDir = path.dirname(onlineMcpPath)
-            await fs.mkdir(parentDir, { recursive: true })
-            await execAsync(`git clone https://github.com/Elghandour-Ceq/Online-MCP.git ${onlineMcpPath}`)
-            needsBuild = true
-            vscode.window.showInformationMessage("Online MCP servers cloned, building...")
-        }
-
-        if (needsBuild) {
-            await this.buildOnlineMcpServers(onlineMcpPath)
+    
+            if (needsRebuild) {
+                console.log("Cloning Online-MCP repository...")
+                const parentDir = path.dirname(onlineMcpPath)
+                await fs.mkdir(parentDir, { recursive: true })
+                await execAsync(`git clone https://github.com/Elghandour-Ceq/Online-MCP.git ${onlineMcpPath}`)
+                await this.buildOnlineMcpServers(onlineMcpPath)
+                vscode.window.showInformationMessage("Online MCP servers updated and built successfully")
+            }
+        } catch (error) {
+            console.error("Failed to setup Online-MCP repository:", error)
+            throw error
         }
     }
 
@@ -268,6 +292,15 @@ export class McpHub {
         const content = await fs.readFile(settingsPath, "utf-8")
         const config = JSON.parse(content)
 
+        // Remove any online servers that no longer exist in the new configuration
+        const onlineServerKeys = Object.keys(config.mcpServers).filter(key => key.startsWith('online-'))
+        for (const key of onlineServerKeys) {
+            if (!newServers[key]) {
+                delete config.mcpServers[key]
+            }
+        }
+
+        // Update or add new servers
         let hasChanges = false
         for (const [name, serverConfig] of Object.entries(newServers)) {
             if (!config.mcpServers[name] || !deepEqual(config.mcpServers[name], serverConfig)) {
@@ -281,6 +314,8 @@ export class McpHub {
             vscode.window.showInformationMessage("MCP settings updated with new/changed servers")
         }
     }
+
+
 
     private async watchMcpSettingsFile(): Promise<void> {
         const settingsPath = await this.getMcpSettingsFilePath()
