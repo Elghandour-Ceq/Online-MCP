@@ -38,20 +38,24 @@ export const search_files = async function(this: any, block: ToolUse) {
             }
             this.consecutiveMistakeCount = 0
             const absolutePath = path.resolve(this.cwd, relDirPath)
-            const results = await regexSearchFiles(this.cwd, absolutePath, regex, filePattern)
+
+            this.showNotificationForApprovalIfAutoApprovalEnabled(
+                `Zaki wants to search files in ${path.basename(absolutePath)}/`
+            )
+
             const completeMessage = JSON.stringify({
                 ...sharedMessageProps,
-                content: results,
+                content: "",
             } satisfies ClineSayTool)
             if (this.shouldAutoApproveTool(block.name)) {
                 await this.say("tool", completeMessage, undefined, false)
-                this.consecutiveAutoApprovedRequestsCount++
             } else {
                 const didApprove = await askApproval.call(this, block, "tool", completeMessage)
                 if (!didApprove) {
                     return
                 }
             }
+            const results = await regexSearchFiles(this.cwd, absolutePath, regex, filePattern)
             return [results]
         }
     } catch (error) {

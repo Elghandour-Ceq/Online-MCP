@@ -22,6 +22,7 @@ export const browser_action = async function(this: any, block: ToolUse) {
         if (block.partial) {
             if (action === "launch") {
                 if (this.shouldAutoApproveTool(block.name)) {
+                    this.consecutiveAutoApprovedRequestsCount++
                     await this.say(
                         "browser_action_launch",
                         removeClosingTag("url", url),
@@ -57,9 +58,14 @@ export const browser_action = async function(this: any, block: ToolUse) {
                     await this.browserSession.closeBrowser()
                 }
                 this.consecutiveMistakeCount = 0
+
+                this.showNotificationForApprovalIfAutoApprovalEnabled(
+                    `Zaki wants to use a browser and launch ${url}`
+                )
+
                 if (this.shouldAutoApproveTool(block.name)) {
-                    await this.say("browser_action_launch", url, undefined, false)
                     this.consecutiveAutoApprovedRequestsCount++
+                    await this.say("browser_action_launch", url, undefined, false)
                 } else {
                     const didApprove = await askApproval.call(this, block, "browser_action_launch", url)
                     if (!didApprove) {

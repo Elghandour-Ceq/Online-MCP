@@ -10,20 +10,13 @@ export const execute_command = async function(this: any, block: ToolUse) {
 
     try {
         if (block.partial) {
-            if (this.shouldAutoApproveTool(block.name)) {
-                await this.say(
-                    "command",
-                    removeClosingTag("command", command),
-                    undefined,
-                    block.partial,
-                ).catch(() => {})
-            } else {
-                await this.ask(
-                    "command",
-                    removeClosingTag("command", command),
-                    block.partial,
-                ).catch(() => {})
-            }
+            // since depending on an upcoming parameter, requiresApproval this may become an ask - we cant partially stream a say prematurely. So in this particular case we have to wait for the requiresApproval parameter to be completed before presenting it.
+            // await this.say(
+            //     "command",
+            //     removeClosingTag("command", command),
+            //     undefined,
+            //     block.partial,
+            // ).catch(() => {})
             return
         } else {
             if (!command) {
@@ -36,9 +29,10 @@ export const execute_command = async function(this: any, block: ToolUse) {
             }
             this.consecutiveMistakeCount = 0
 
-            if (!requiresApproval && this.shouldAutoApproveTool(block.name)) {
-                await this.say("command", command, undefined, false)
+            const didAutoApprove = !requiresApproval && this.shouldAutoApproveTool(block.name)
+            if (didAutoApprove) {
                 this.consecutiveAutoApprovedRequestsCount++
+                await this.say("command", command, undefined, false)
             } else {
                 const didApprove = await askApproval.call(
                     this,
@@ -51,7 +45,20 @@ export const execute_command = async function(this: any, block: ToolUse) {
                 }
             }
 
+            let timeoutId: NodeJS.Timeout | undefined
+            if (didAutoApprove && this.autoApprovalSettings.enableNotifications) {
+                // if the command was auto-approved, and it's long running we need to notify the user after some time has passed without proceeding
+                timeoutId = setTimeout(() => {
+                    this.showNotificationForApprovalIfAutoApprovalEnabled(
+                        "An auto-approved command has been running for 30s, and may need your attention."
+                    )
+                }, 30_000)
+            }
+
             const [userRejected, result] = await this.executeCommandTool(command)
+            if (timeoutId) {
+                clearTimeout(timeoutId)
+            }
             if (userRejected) {
                 this.didRejectTool = true
             }

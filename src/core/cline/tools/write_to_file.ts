@@ -45,8 +45,7 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
     const sharedMessageProps: ClineSayTool = {
         tool: fileExists ? "editedExistingFile" : "newFileCreated",
         path: getReadablePath(this.cwd, removeClosingTag("path", relPath)),
-        content: fileExists ? undefined : content,
-        diff: fileExists ? diff : undefined,
+        content: diff || content,
     }
 
     try {
@@ -91,6 +90,7 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
             // Handle partial updates
             const partialMessage = JSON.stringify(sharedMessageProps)
             if (this.shouldAutoApproveTool(block.name)) {
+                this.consecutiveAutoApprovedRequestsCount++
                 await this.say("tool", partialMessage, undefined, block.partial)
             } else {
                 await this.ask("tool", partialMessage, block.partial).catch(() => {})
@@ -109,6 +109,7 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
         if (!this.diffViewProvider.isEditing) {
             const partialMessage = JSON.stringify(sharedMessageProps)
             if (this.shouldAutoApproveTool(block.name)) {
+                this.consecutiveAutoApprovedRequestsCount++
                 await this.say("tool", partialMessage, undefined, true)
             } else {
                 await this.ask("tool", partialMessage, true).catch(() => {})
@@ -122,13 +123,14 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
 
         const completeMessage = JSON.stringify({
             ...sharedMessageProps,
-            content: fileExists ? undefined : newContent,
-            diff: fileExists ? diff : undefined,
+            content: diff || content,
         } satisfies ClineSayTool)
 
         if (this.shouldAutoApproveTool(block.name)) {
             await this.say("tool", completeMessage, undefined, false)
             this.consecutiveAutoApprovedRequestsCount++
+            // we need an artificial delay to let the diagnostics catch up to the changes
+									await delay(3_500)
         } else {
             const didApprove = await askApproval.call(this, block, "tool", completeMessage)
             if (!didApprove) {

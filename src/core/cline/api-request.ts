@@ -11,6 +11,7 @@ import { addCustomInstructions, SYSTEM_PROMPT } from "../prompts/system"
 import { truncateHalfConversation } from "../sliding-window"
 import pWaitFor from "p-wait-for"
 import { McpConnection } from "../../services/mcp/McpHub"
+import { showSystemNotification } from "../../integrations/notifications"
 
 export async function* attemptApiRequest(this: any, previousApiReqIndex: number): any {
     const cwd = this.workspaceTracker?.getCwd() ?? process.cwd()
@@ -26,7 +27,6 @@ export async function* attemptApiRequest(this: any, previousApiReqIndex: number)
 		// 	"mcpServers for system prompt:",
 		// 	JSON.stringify(
 		// 		mcpHub.connections.map((conn: McpConnection) => conn.server)
-
 		// 	),
 		// )
         let systemPrompt = await SYSTEM_PROMPT(cwd, this.api.getModel().info.supportsComputerUse ?? false, mcpHub, this.personality)
@@ -101,9 +101,15 @@ export async function recursivelyMakeClineRequests(
 			this.autoApprovalSettings.enabled &&
 			this.consecutiveAutoApprovedRequestsCount >= this.autoApprovalSettings.maxRequests
 		) {
+            if (this.autoApprovalSettings.enableNotifications) {
+                showSystemNotification({
+                    subtitle: "Max Requests Reached",
+                    message: `Zaki has auto-approved ${this.autoApprovalSettings.maxRequests.toString()} API requests.`,
+                })
+            }
 			await this.ask(
 				"auto_approval_max_req_reached",
-				`Cline has auto-approved ${this.autoApprovalSettings.maxRequests.toString()} API requests. Would you like to reset the count and proceed with the task?`,
+				`Zaki has auto-approved ${this.autoApprovalSettings.maxRequests.toString()} API requests. Would you like to reset the count and proceed with the task?`,
 			)
 			// if we get past the promise it means the user approved and did not start a new task
 			this.consecutiveAutoApprovedRequestsCount = 0

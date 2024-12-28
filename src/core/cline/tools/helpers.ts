@@ -3,6 +3,7 @@ import { ToolParamName, ToolUse } from "../../assistant-message"
 import { serializeError } from "serialize-error"
 import { Anthropic } from "@anthropic-ai/sdk"
 import { ClineAsk } from "../../../shared/ExtensionMessage"
+import { showSystemNotification } from "../../../integrations/notifications"
 
 export type ToolResponse = string | Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam>
 
@@ -90,6 +91,13 @@ export const askApproval = async function (this: any, block: ToolUse, type: Clin
 }
 
 export const handleError = async function (this: any, action: string, error: Error) {
+    if (this.autoApprovalSettings.enabled && this.autoApprovalSettings.enableNotifications) {
+        showSystemNotification({
+            subtitle: "Error",
+            message: "Zaki is having trouble. Would you like to continue the task?",
+        })
+    }
+
     const errorString = `Error ${action}: ${JSON.stringify(serializeError(error))}`
     await this.say(
         "error",

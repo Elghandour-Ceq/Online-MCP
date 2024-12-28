@@ -57,7 +57,6 @@ export class StateManager {
         this.excludeZakiFolder();
     }
 
-    // New method to set  => active status
 
 
     async setExtensionActive(isActive: boolean) {

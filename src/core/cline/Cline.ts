@@ -49,6 +49,7 @@ import { truncateHalfConversation } from "../sliding-window"
 import { ClineProvider, GlobalFileNames } from "../webview/ClineProvider"
 import { showOmissionWarning } from "../../integrations/editor/detect-omission"
 import { BrowserSession } from "../../services/browser/BrowserSession"
+import { showSystemNotification } from "../../integrations/notifications"
 
 import { 
     UserContent, 
@@ -96,7 +97,6 @@ export class Cline {
     private askResponseText?: string
     private askResponseImages?: string[]
     private lastMessageTs?: number
-    private consecutiveAutoApprovedRequestsCount: number = 0
     private consecutiveMistakeCount: number = 0
     providerRef: WeakRef<ClineProvider>
     private abort: boolean = false
@@ -167,6 +167,15 @@ export class Cline {
             }
         }
         return false
+    }
+
+    showNotificationForApprovalIfAutoApprovalEnabled(message: string) {
+        if (this.autoApprovalSettings.enabled && this.autoApprovalSettings.enableNotifications) {
+            showSystemNotification({
+                subtitle: "Approval Required",
+                message,
+            })
+        }
     }
 
     // Bind methods from separate files

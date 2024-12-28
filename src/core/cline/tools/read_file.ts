@@ -30,13 +30,17 @@ export const read_file = async function(this: any, block: ToolUse) {
             }
             this.consecutiveMistakeCount = 0
             const absolutePath = path.resolve(this.cwd, relPath)
+
+            this.showNotificationForApprovalIfAutoApprovalEnabled(
+                `Zaki wants to read ${path.basename(absolutePath)}`
+            )
+
             const completeMessage = JSON.stringify({
                 ...sharedMessageProps,
                 content: absolutePath,
             } satisfies ClineSayTool)
             if (this.shouldAutoApproveTool(block.name)) {
                 await this.say("tool", completeMessage, undefined, false)
-                this.consecutiveAutoApprovedRequestsCount++
             } else {
                 const didApprove = await askApproval.call(this, block, "tool", completeMessage)
                 if (!didApprove) {
