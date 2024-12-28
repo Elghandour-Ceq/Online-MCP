@@ -52,6 +52,15 @@ export class MessageHandler {
             case "alwaysAllowReadOnly":
                 await this.handleAlwaysAllowReadOnly(message.bool)
                 break
+            case "autoApprovalSettings":
+                if (message.autoApprovalSettings) {
+                    await this.stateManager.updateGlobalState("autoApprovalSettings", message.autoApprovalSettings)
+                    if (this.getCline()) {
+                        this.getCline()!.autoApprovalSettings = message.autoApprovalSettings
+                    }
+                    await this.postStateToWebview()
+                }
+                break
             case "askResponse":
                 this.handleAskResponse(message.askResponse!, message.text, message.images)
                 break
@@ -349,7 +358,8 @@ export class MessageHandler {
                 clineMessages: this.getCline()?.clineMessages || [],
                 taskHistory: (state.taskHistory || []).filter((item) => item.ts && item.task).sort((a, b) => b.ts - a.ts),
                 shouldShowAnnouncement: state.lastShownAnnouncementId !== this.latestAnnouncementId,
-                extensionActive: state.extensionActive ?? true // Default to true if not set
+                extensionActive: state.extensionActive ?? true, // Default to true if not set
+                autoApprovalSettings: state.autoApprovalSettings
             }
         })
     }

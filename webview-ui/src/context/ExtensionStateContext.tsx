@@ -1,16 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react"
 import { useEvent } from "react-use"
 import { ExtensionMessage, ExtensionState } from "../../../src/shared/ExtensionMessage"
+import { DEFAULT_AUTO_APPROVAL_SETTINGS } from "../../../src/shared/AutoApprovalSettings"
 import {
 	ApiConfiguration,
 	ModelInfo,
 	openRouterDefaultModelId,
 	openRouterDefaultModelInfo,
 } from "../../../src/shared/api"
-import { vscode } from "../utils/vscode"
-import { convertTextMateToHljs } from "../utils/textMateToHljs"
 import { findLastIndex } from "../../../src/shared/array"
 import { McpServer } from "../../../src/shared/mcp"
+import { convertTextMateToHljs } from "../utils/textMateToHljs"
+import { vscode } from "../utils/vscode"
+
 
 
 
@@ -38,6 +40,7 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		clineMessages: [],
 		taskHistory: [],
 		shouldShowAnnouncement: false,
+		autoApprovalSettings: DEFAULT_AUTO_APPROVAL_SETTINGS,
 		personality: DEFAULT_PERSONALITY,
 		extensionActive: true // Default to true until we get state from extension
 	})

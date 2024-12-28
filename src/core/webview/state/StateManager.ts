@@ -38,6 +38,7 @@ export type GlobalStateKey =
     | "openRouterModelId"
     | "openRouterModelInfo"
     | "extensionActive"  // New key to track extension activation status
+    | "autoApprovalSettings"
 
 type ProjectFileConfig = {
     key: "taskHistory" | "personality" | "customInstructions";
@@ -195,6 +196,7 @@ export class StateManager {
             personality,
             alwaysAllowReadOnly,
             taskHistory,
+            autoApprovalSettings,
         ] = await Promise.all([
             this.getGlobalState("apiProvider") as Promise<ApiProvider | undefined>,
             this.getGlobalState("apiModelId") as Promise<string | undefined>,
@@ -225,6 +227,7 @@ export class StateManager {
             this.getGlobalState("personality") as Promise<string | undefined>,
             this.getGlobalState("alwaysAllowReadOnly") as Promise<boolean | undefined>,
             this.getGlobalState("taskHistory") as Promise<HistoryItem[] | undefined>,
+            this.getGlobalState("autoApprovalSettings") as Promise<any | undefined>,
         ])
 
         const isActive = await this.isExtensionActive();
@@ -272,7 +275,8 @@ export class StateManager {
             personality,
             alwaysAllowReadOnly: alwaysAllowReadOnly ?? false,
             taskHistory,
-            extensionActive: isActive
+            extensionActive: isActive,
+            autoApprovalSettings: autoApprovalSettings || {} // default value as empty object
         };
     }
 

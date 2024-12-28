@@ -12,6 +12,7 @@ import { StateManager, GlobalStateKey } from "./state/StateManager"
 import { TaskManager } from "./task/TaskManager"
 import { WebviewManager } from "./webview/WebviewManager"
 import { McpHub } from "../../services/mcp/McpHub"
+import { AutoApprovalSettings, DEFAULT_AUTO_APPROVAL_SETTINGS } from "../../shared/AutoApprovalSettings"
 
 export const GlobalFileNames = {
     apiConversationHistory: "api_conversation_history.json",
@@ -145,7 +146,8 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                 clineMessages: this.cline?.clineMessages || [],
                 taskHistory: (state.taskHistory || []).filter((item) => item.ts && item.task).sort((a, b) => b.ts - a.ts),
                 shouldShowAnnouncement: state.lastShownAnnouncementId !== this.latestAnnouncementId,
-                extensionActive: state.extensionActive ?? true
+                extensionActive: state.extensionActive ?? true,
+                autoApprovalSettings: state.autoApprovalSettings || DEFAULT_AUTO_APPROVAL_SETTINGS
             }
         })
     }

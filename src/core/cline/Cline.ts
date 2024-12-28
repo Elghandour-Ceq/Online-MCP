@@ -56,6 +56,8 @@ import {
     ClineConstructorParams, 
     ClineState 
 } from "./types"
+import { AutoApprovalSettings } from "../../shared/AutoApprovalSettings"
+
 
 import * as TaskLifecycle from "./task-lifecycle"
 import * as ApiRequest from "./api-request"
@@ -88,6 +90,7 @@ export class Cline {
     customInstructions?: string
     personality?: string
     alwaysAllowReadOnly: boolean
+    autoApprovalSettings: AutoApprovalSettings
     apiConversationHistory: Anthropic.MessageParam[] = []
     clineMessages: ClineMessage[] = []
     private askResponse?: ClineAskResponse
@@ -115,6 +118,7 @@ export class Cline {
     constructor(
         provider: ClineProvider,
         apiConfiguration: ApiConfiguration,
+        autoApprovalSettings: AutoApprovalSettings,
         customInstructions?: string,
         personality?: string,
         alwaysAllowReadOnly?: boolean,
@@ -131,6 +135,7 @@ export class Cline {
         this.customInstructions = customInstructions
         this.personality = personality
         this.alwaysAllowReadOnly = alwaysAllowReadOnly ?? false
+        this.autoApprovalSettings = autoApprovalSettings
 
         if (historyItem) {
             this.taskId = historyItem.id

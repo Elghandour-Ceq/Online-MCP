@@ -1,4 +1,5 @@
-import { ApiConfiguration, ApiProvider } from "./api"
+import { ApiConfiguration } from "./api"
+import { AutoApprovalSettings } from "./AutoApprovalSettings"
 
 export interface WebviewMessage {
 	type:
@@ -27,11 +28,14 @@ export interface WebviewMessage {
 		| "retryUpdate"
 		| "openMcpSettings"
 		| "restartMcpServer"  // Added for update retry functionality
+		| "autoApprovalSettings"
+
 	text?: string
 	askResponse?: ClineAskResponse
 	apiConfiguration?: ApiConfiguration
 	images?: string[]
 	bool?: boolean
+	autoApprovalSettings?: AutoApprovalSettings
 }
 
 export type ClineAskResponse = "yesButtonClicked" | "noButtonClicked" | "messageResponse"

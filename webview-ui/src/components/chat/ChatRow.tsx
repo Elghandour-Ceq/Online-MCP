@@ -256,7 +256,7 @@ export const ChatRowContent = ({
 							<span style={{ fontWeight: "bold" }}>ZAKI wants to edit this file:</span>
 						</div>
 						<CodeAccordian
-							isLoading={message.partial}
+							// isLoading={message.partial}
 							diff={tool.diff!}
 							path={tool.path!}
 							isExpanded={isExpanded}
