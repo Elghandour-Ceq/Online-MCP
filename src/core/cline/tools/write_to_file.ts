@@ -8,16 +8,29 @@ import { getReadablePath } from "../../../utils/path"
 import { formatResponse } from "../../prompts/responses"
 import { showOmissionWarning } from "../../../integrations/editor/detect-omission"
 import { ToolUse } from "../../assistant-message"
+import { constructNewFileContent } from "../../assistant-message/diff"
 import { removeClosingTag, askApproval, handleError } from "./helpers"
+import { ToolResponse } from "../types"
 
-export const write_to_file = async function(this: any, block: ToolUse) {
+export const write_to_file = async function(this: any, block: ToolUse): Promise<ToolResponse | undefined> {
     const relPath: string | undefined = block.params.path
-    let newContent: string | undefined = block.params.content
-    if (!relPath || !newContent) {
-        // checking for newContent ensure relPath is complete
-        // wait so we can determine if it's a new file or editing an existing file
-        return
+    let diff: string | undefined = block.params.diff
+    
+    // Early parameter validation
+    if (!relPath || !diff) {
+        if (!relPath) {
+            this.consecutiveMistakeCount++
+            const errorMsg = await this.sayAndCreateMissingParamError("write_to_file", "path")
+            return [{ type: "text", text: errorMsg }]
+        }
+        if (!diff) {
+            this.consecutiveMistakeCount++
+            const errorMsg = await this.sayAndCreateMissingParamError("write_to_file", "diff")
+            return [{ type: "text", text: errorMsg }]
+        }
+        return undefined
     }
+
     // Check if file exists using cached map or fs.access
     let fileExists: boolean
     if (this.diffViewProvider.editType !== undefined) {
@@ -28,124 +41,109 @@ export const write_to_file = async function(this: any, block: ToolUse) {
         this.diffViewProvider.editType = fileExists ? "modify" : "create"
     }
 
-    // pre-processing newContent for cases where weaker models might add artifacts like markdown codeblock markers (deepseek/llama) or extra escape characters (gemini)
-    if (newContent.startsWith("```")) {
-        // this handles cases where it includes language specifiers like ```python ```js
-        newContent = newContent.split("\n").slice(1).join("\n").trim()
-    }
-    if (newContent.endsWith("```")) {
-        newContent = newContent.split("\n").slice(0, -1).join("\n").trim()
-    }
-
-    if (!this.api.getModel().id.includes("claude")) {
-        // it seems not just llama models are doing this, but also gemini and potentially others
-        if (
-            newContent.includes("&gt;") ||
-            newContent.includes("&lt;") ||
-            newContent.includes("&quot;")
-        ) {
-            newContent = newContent
-                .replace(/&gt;/g, ">")
-                .replace(/&lt;/g, "<")
-                .replace(/&quot;/g, '"')
-        }
-    }
-
     const sharedMessageProps: ClineSayTool = {
         tool: fileExists ? "editedExistingFile" : "newFileCreated",
         path: getReadablePath(this.cwd, removeClosingTag("path", relPath)),
     }
+
     try {
+        let newContent = await constructNewFileContent(
+            diff,
+            this.diffViewProvider.originalContent || "",
+            !block.partial,
+        )
+
+        if (!this.api.getModel().id.includes("claude")) {
+            // Handle content preprocessing for non-Claude models
+            if (
+                newContent.includes("&gt;") ||
+                newContent.includes("&lt;") ||
+                newContent.includes("&quot;")
+            ) {
+                newContent = newContent
+                    .replace(/&gt;/g, ">")
+                    .replace(/&lt;/g, "<")
+                    .replace(/&quot;/g, '"')
+            }
+        }
+        newContent = newContent.trimEnd() // remove any trailing newlines
+
         if (block.partial) {
-            // update gui message
+            // Handle partial updates
             const partialMessage = JSON.stringify(sharedMessageProps)
             await this.ask("tool", partialMessage, block.partial).catch(() => {})
-            // update editor
+            
             if (!this.diffViewProvider.isEditing) {
-                // open the editor and prepare to stream content in
                 await this.diffViewProvider.open(relPath)
             }
-            // editor is open, stream content in
             await this.diffViewProvider.update(newContent, false)
-            return
-        } else {
-            if (!relPath) {
-                this.consecutiveMistakeCount++
-                return [await this.sayAndCreateMissingParamError("write_to_file", "path")]
-                await this.diffViewProvider.reset()
-                return
-            }
-            if (!newContent) {
-                this.consecutiveMistakeCount++
-                return [await this.sayAndCreateMissingParamError("write_to_file", "content")]
-                await this.diffViewProvider.reset()
-                return
-            }
-            this.consecutiveMistakeCount = 0
-
-            // if isEditingFile false, that means we have the full contents of the file already.
-            // it's important to note how this function works, you can't make the assumption that the block.partial conditional will always be called since it may immediately get complete, non-partial data. So this part of the logic will always be called.
-            // in other words, you must always repeat the block.partial logic here
-            if (!this.diffViewProvider.isEditing) {
-                // show gui message before showing edit animation
-                const partialMessage = JSON.stringify(sharedMessageProps)
-                await this.ask("tool", partialMessage, true).catch(() => {}) // sending true for partial even though it's not a partial, this shows the edit row before the content is streamed into the editor
-                await this.diffViewProvider.open(relPath)
-            }
-            await this.diffViewProvider.update(newContent, true)
-            await delay(300) // wait for diff view to update
-            this.diffViewProvider.scrollToFirstDiff()
-            showOmissionWarning(this.diffViewProvider.originalContent || "", newContent)
-
-            const completeMessage = JSON.stringify({
-                ...sharedMessageProps,
-                content: fileExists ? undefined : newContent,
-                diff: fileExists
-                    ? formatResponse.createPrettyPatch(
-                            relPath,
-                            this.diffViewProvider.originalContent,
-                            newContent,
-                        )
-                    : undefined,
-            } satisfies ClineSayTool)
-            const didApprove = await askApproval.call(this, block, "tool", completeMessage)
-            if (!didApprove) {
-                await this.diffViewProvider.revertChanges()
-                return
-            }
-            const { newProblemsMessage, userEdits, finalContent } =
-                await this.diffViewProvider.saveChanges()
-            this.didEditFile = true // used to determine if we should wait for busy terminal to update before sending api request
-            if (userEdits) {
-                await this.say(
-                    "user_feedback_diff",
-                    JSON.stringify({
-                        tool: fileExists ? "editedExistingFile" : "newFileCreated",
-                        path: getReadablePath(this.cwd, relPath),
-                        diff: userEdits,
-                    } satisfies ClineSayTool),
-                )
-                return [
-                    `The user made the following updates to your content:\n\n${userEdits}\n\n` +
-                        `The updated content, which includes both your original modifications and the user's edits, has been successfully saved to ${relPath}. Here is the full, updated content of the file:\n\n` +
-                        `<final_file_content path="${relPath}">\n${finalContent}\n</final_file_content>\n\n` +
-                        `Please note:\n` +
-                        `1. You do not need to re-write the file with these changes, as they have already been applied.\n` +
-                        `2. Proceed with the task using this updated file content as the new baseline.\n` +
-                        `3. If the user's edits have addressed part of the task or changed the requirements, adjust your approach accordingly.` +
-                        `${newProblemsMessage}`
-                ]
-            } else {
-                return [
-                    `The content was successfully saved to ${relPath}.${newProblemsMessage}`
-                ]
-            }
-            await this.diffViewProvider.reset()
-            return
+            return undefined
         }
+
+        // Handle complete updates
+        this.consecutiveMistakeCount = 0
+
+        if (!this.diffViewProvider.isEditing) {
+            const partialMessage = JSON.stringify(sharedMessageProps)
+            await this.ask("tool", partialMessage, true).catch(() => {})
+            await this.diffViewProvider.open(relPath)
+        }
+
+        await this.diffViewProvider.update(newContent, true)
+        await delay(300)
+        this.diffViewProvider.scrollToFirstDiff()
+
+        const completeMessage = JSON.stringify({
+            ...sharedMessageProps,
+            content: fileExists ? undefined : newContent,
+            diff: fileExists ? diff : undefined,
+        } satisfies ClineSayTool)
+
+        const didApprove = await askApproval.call(this, block, "tool", completeMessage)
+        if (!didApprove) {
+            await this.diffViewProvider.revertChanges()
+            return undefined
+        }
+
+        const { newProblemsMessage, userEdits, finalContent } = await this.diffViewProvider.saveChanges()
+        this.didEditFile = true
+
+        if (userEdits) {
+            await this.say(
+                "user_feedback_diff",
+                JSON.stringify({
+                    tool: fileExists ? "editedExistingFile" : "newFileCreated",
+                    path: getReadablePath(this.cwd, relPath),
+                    diff: userEdits,
+                } satisfies ClineSayTool)
+            )
+
+            return [{
+                type: "text",
+                text: `The user made the following updates to your content:\n\n${userEdits}\n\n` +
+                    `The updated content, which includes both your original modifications and the user's edits, has been successfully saved to ${relPath}. Here is the full, updated content of the file:\n\n` +
+                    `<final_file_content path="${relPath}">\n${finalContent}\n</final_file_content>\n\n` +
+                    `IMPORTANT: If you need to make further changes to this file, use this final_file_content as the new baseline for your changes, as it is now the current state of the file (including the user's edits and any auto-formatting done by the system). \n\n` +
+                    `Please note:\n` +
+                    `1. You do not need to re-write the file with these changes, as they have already been applied.\n` +
+                    `2. Proceed with the task using this updated file content as the new baseline.\n` +
+                    `3. If the user's edits have addressed part of the task or changed the requirements, adjust your approach accordingly.` +
+                    `${newProblemsMessage}`
+            }]
+        }
+
+        await this.diffViewProvider.reset()
+        return [{
+            type: "text",
+            text: `The content was successfully saved to ${relPath}.\n\n` +
+                `Here is the full, updated content of the file:\n\n` +
+                `<final_file_content path="${relPath}">\n${finalContent}\n</final_file_content>\n\n` +
+                `IMPORTANT: If you need to make further changes to this file, use this final_file_content as the new baseline for your changes, as it is now the current state of the file (including any auto-formatting done by the system). \n\n` +
+                `${newProblemsMessage}`
+        }]
     } catch (error) {
         const result = await handleError.call(this, "writing file", error)
         await this.diffViewProvider.reset()
-        return [result]
+        return [{ type: "text", text: result }]
     }
 }

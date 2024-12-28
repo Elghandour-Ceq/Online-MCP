@@ -584,7 +584,7 @@ export const ChatRowContent = ({
 								width: "100%",
 							}}>
 							<CodeAccordian
-								diff={tool.diff!}
+								code={tool.diff!}
 								isFeedback={true}
 								isExpanded={isExpanded}
 								onToggleExpand={onToggleExpand}
