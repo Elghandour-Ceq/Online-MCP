@@ -4,6 +4,7 @@ import * as fs from "fs/promises"
 import { ApiProvider, ModelInfo } from "../../../shared/api"
 import { HistoryItem } from "../../../shared/HistoryItem"
 import { readJsonFile, writeJsonFile, ensureJsonDirectory } from "../../../utils/json-storage"
+import { AutoApprovalSettings, DEFAULT_AUTO_APPROVAL_SETTINGS } from "../../../shared/AutoApprovalSettings"
 
 export type SecretKey =
     | "apiKey"
@@ -25,7 +26,6 @@ export type GlobalStateKey =
     | "lastShownAnnouncementId"
     | "customInstructions"
     | "personality"
-    | "alwaysAllowReadOnly"
     | "taskHistory"
     | "openAiBaseUrl"
     | "openAiModelId"
@@ -44,7 +44,7 @@ type ProjectFileConfig = {
     key: "taskHistory" | "personality" | "customInstructions";
     filename: string;
     defaultValue: any;
-};
+}
 
 export class StateManager {
     private readonly PROJECT_FILES: ProjectFileConfig[] = [
@@ -57,7 +57,9 @@ export class StateManager {
         this.excludeZakiFolder();
     }
 
-    // New method to set extension active status
+    // New method to set  => active status
+
+
     async setExtensionActive(isActive: boolean) {
         await this.updateGlobalState("extensionActive", isActive);
     }
@@ -194,7 +196,6 @@ export class StateManager {
             lastShownAnnouncementId,
             customInstructions,
             personality,
-            alwaysAllowReadOnly,
             taskHistory,
             autoApprovalSettings,
         ] = await Promise.all([
@@ -225,9 +226,8 @@ export class StateManager {
             this.getGlobalState("lastShownAnnouncementId") as Promise<string | undefined>,
             this.getGlobalState("customInstructions") as Promise<string | undefined>,
             this.getGlobalState("personality") as Promise<string | undefined>,
-            this.getGlobalState("alwaysAllowReadOnly") as Promise<boolean | undefined>,
             this.getGlobalState("taskHistory") as Promise<HistoryItem[] | undefined>,
-            this.getGlobalState("autoApprovalSettings") as Promise<any | undefined>,
+            this.getGlobalState("autoApprovalSettings") as Promise<AutoApprovalSettings | undefined>,
         ])
 
         const isActive = await this.isExtensionActive();
@@ -273,10 +273,9 @@ export class StateManager {
             lastShownAnnouncementId,
             customInstructions,
             personality,
-            alwaysAllowReadOnly: alwaysAllowReadOnly ?? false,
             taskHistory,
             extensionActive: isActive,
-            autoApprovalSettings: autoApprovalSettings || {} // default value as empty object
+            autoApprovalSettings: autoApprovalSettings || DEFAULT_AUTO_APPROVAL_SETTINGS
         };
     }
 

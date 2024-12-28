@@ -141,7 +141,6 @@ export class ClineProvider implements vscode.WebviewViewProvider {
                 apiConfiguration: state.apiConfiguration,
                 customInstructions: state.customInstructions,
                 personality: state.personality,
-                alwaysAllowReadOnly: state.alwaysAllowReadOnly,
                 uriScheme: vscode.env.uriScheme,
                 clineMessages: this.cline?.clineMessages || [],
                 taskHistory: (state.taskHistory || []).filter((item) => item.ts && item.task).sort((a, b) => b.ts - a.ts),

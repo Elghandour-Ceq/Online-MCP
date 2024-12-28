@@ -49,9 +49,6 @@ export class MessageHandler {
             case "personality":
                 await this.handlePersonality(message.text)
                 break
-            case "alwaysAllowReadOnly":
-                await this.handleAlwaysAllowReadOnly(message.bool)
-                break
             case "autoApprovalSettings":
                 if (message.autoApprovalSettings) {
                     await this.stateManager.updateGlobalState("autoApprovalSettings", message.autoApprovalSettings)
@@ -229,14 +226,14 @@ export class MessageHandler {
         await this.provider.updatePersonality(personality)
     }
 
-    private async handleAlwaysAllowReadOnly(value?: boolean): Promise<void> {
-        await this.stateManager.updateGlobalState("alwaysAllowReadOnly", value ?? undefined)
-        const cline = this.getCline()
-        if (cline) {
-            cline.alwaysAllowReadOnly = value ?? false
-        }
-        await this.postStateToWebview()
-    }
+    // private async handleAlwaysAllowReadOnly(value?: boolean): Promise<void> {
+    //     await this.stateManager.updateGlobalState("alwaysAllowReadOnly", value ?? undefined)
+    //     const cline = this.getCline()
+    //     if (cline) {
+    //         cline.alwaysAllowReadOnly = value ?? false
+    //     }
+    //     await this.postStateToWebview()
+    // }
 
     private handleAskResponse(askResponse: any, text?: string, images?: string[]): void {
         const cline = this.getCline()
@@ -353,7 +350,6 @@ export class MessageHandler {
                 apiConfiguration: state.apiConfiguration,
                 customInstructions: state.customInstructions,
                 personality: state.personality,
-                alwaysAllowReadOnly: state.alwaysAllowReadOnly,
                 uriScheme: vscode.env.uriScheme,
                 clineMessages: this.getCline()?.clineMessages || [],
                 taskHistory: (state.taskHistory || []).filter((item) => item.ts && item.task).sort((a, b) => b.ts - a.ts),

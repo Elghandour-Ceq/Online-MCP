@@ -123,14 +123,13 @@ export class TaskManager {
         images?: string[]
     ): Promise<Cline> {
         console.log("[DEBUG] Initializing Cline with new task");
-        const { apiConfiguration, customInstructions, personality, alwaysAllowReadOnly, autoApprovalSettings } = await this.stateManager.getState()
+        const { apiConfiguration, customInstructions, personality, autoApprovalSettings } = await this.stateManager.getState()
         return new Cline(
             provider,
             apiConfiguration,
             autoApprovalSettings || DEFAULT_AUTO_APPROVAL_SETTINGS,
             customInstructions,
             personality,
-            alwaysAllowReadOnly,
             task,
             images
         )
@@ -141,14 +140,13 @@ export class TaskManager {
         historyItem: HistoryItem
     ): Promise<Cline> {
         console.log("[DEBUG] Initializing Cline with history item:", historyItem.id);
-        const { apiConfiguration, customInstructions, personality, alwaysAllowReadOnly, autoApprovalSettings } = await this.stateManager.getState()
+        const { apiConfiguration, customInstructions, personality, autoApprovalSettings } = await this.stateManager.getState()
         return new Cline(
             provider,
             apiConfiguration,
             autoApprovalSettings || DEFAULT_AUTO_APPROVAL_SETTINGS,
             customInstructions,
             personality,
-            alwaysAllowReadOnly,
             undefined,
             undefined,
             historyItem

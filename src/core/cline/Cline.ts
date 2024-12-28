@@ -89,7 +89,6 @@ export class Cline {
     private didEditFile: boolean = false
     customInstructions?: string
     personality?: string
-    alwaysAllowReadOnly: boolean
     autoApprovalSettings: AutoApprovalSettings
     apiConversationHistory: Anthropic.MessageParam[] = []
     clineMessages: ClineMessage[] = []
@@ -97,6 +96,7 @@ export class Cline {
     private askResponseText?: string
     private askResponseImages?: string[]
     private lastMessageTs?: number
+    private consecutiveAutoApprovedRequestsCount: number = 0
     private consecutiveMistakeCount: number = 0
     providerRef: WeakRef<ClineProvider>
     private abort: boolean = false
@@ -121,7 +121,6 @@ export class Cline {
         autoApprovalSettings: AutoApprovalSettings,
         customInstructions?: string,
         personality?: string,
-        alwaysAllowReadOnly?: boolean,
         task?: string,
         images?: string[],
         historyItem?: HistoryItem,
@@ -134,7 +133,6 @@ export class Cline {
         this.diffViewProvider = new DiffViewProvider(this.cwd)
         this.customInstructions = customInstructions
         this.personality = personality
-        this.alwaysAllowReadOnly = alwaysAllowReadOnly ?? false
         this.autoApprovalSettings = autoApprovalSettings
 
         if (historyItem) {
@@ -146,6 +144,29 @@ export class Cline {
         } else {
             throw new Error("Either historyItem or task/images must be provided")
         }
+    }
+
+    shouldAutoApproveTool(toolName: ToolUseName): boolean {
+        if (this.autoApprovalSettings.enabled) {
+            switch (toolName) {
+                case "read_file":
+                case "list_files":
+                case "list_code_definition_names":
+                case "search_files":
+                    return this.autoApprovalSettings.actions.readFiles
+                case "write_to_file":
+                case "replace_in_file":
+                    return this.autoApprovalSettings.actions.editFiles
+                case "execute_command":
+                    return this.autoApprovalSettings.actions.executeCommands
+                case "browser_action":
+                    return this.autoApprovalSettings.actions.useBrowser
+                case "access_mcp_resource":
+                case "use_mcp_tool":
+                    return this.autoApprovalSettings.actions.useMcp
+            }
+        }
+        return false
     }
 
     // Bind methods from separate files
@@ -192,14 +213,14 @@ export class Cline {
         this.presentAssistantMessageHasPendingUpdates = false
 
         if (this.currentStreamingContentIndex >= this.assistantMessageContent.length) {
-			// this may happen if the last content block was completed before streaming could finish. if streaming is finished, and we're out of bounds then this means we already presented/executed the last content block and are ready to continue to next request
+            // this may happen if the last content block was completed before streaming could finish. if streaming is finished, and we're out of bounds then this means we already presented/executed the last content block and are ready to continue to next request
             if (this.didCompleteReadingStream) {
                 this.userMessageContentReady = true
             }
-			// console.log("no more content blocks to stream! this shouldn't happen?")
+            // console.log("no more content blocks to stream! this shouldn't happen?")
             this.presentAssistantMessageLocked = false
             return
-			//throw new Error("No more content blocks to stream! This shouldn't happen...") // remove and just return after testing
+            //throw new Error("No more content blocks to stream! This shouldn't happen...") // remove and just return after testing
         }
 
         const block = cloneDeep(this.assistantMessageContent[this.currentStreamingContentIndex])
@@ -210,13 +231,13 @@ export class Cline {
                 }
                 let content = block.content
                 if (content) {
-					// (have to do this for partial and complete since sending content in thinking tags to markdown renderer will automatically be removed)
-					// Remove end substrings of <thinking or </thinking (below xml parsing is only for opening tags)
-					// (this is done with the xml parsing below now, but keeping here for reference)
-					// content = content.replace(/<\/?t(?:h(?:i(?:n(?:k(?:i(?:n(?:g)?)?)?)?)?)?)?$/, "")
-					// Remove all instances of <thinking> (with optional line break after) and </thinking> (with optional line break before)
-					// - Needs to be separate since we dont want to remove the line break before the first tag
-					// - Needs to happen before the xml parsing below
+                    // (have to do this for partial and complete since sending content in thinking tags to markdown renderer will automatically be removed)
+                    // Remove end substrings of <thinking or </thinking (below xml parsing is only for opening tags)
+                    // (this is done with the xml parsing below now, but keeping here for reference)
+                    // content = content.replace(/<\/?t(?:h(?:i(?:n(?:k(?:i(?:n(?:g)?)?)?)?)?)?)?$/, "")
+                    // Remove all instances of <thinking> (with optional line break after) and </thinking> (with optional line break before)
+                    // - Needs to be separate since we dont want to remove the line break before the first tag
+                    // - Needs to happen before the xml parsing below
                     content = content.replace(/<thinking>\s?/g, "")
                     content = content.replace(/\s?<\/thinking>/g, "")
 
@@ -252,7 +273,7 @@ export class Cline {
                         case "write_to_file":
                             return `[${block.name} for '${block.params.path}']`
                         case "replace_in_file":
-							return `[${block.name} for '${block.params.path}']`
+                            return `[${block.name} for '${block.params.path}']`
                         case "search_files":
                             return `[${block.name} for '${block.params.regex}'${
                                 block.params.file_pattern ? ` in '${block.params.file_pattern}'` : ""
@@ -367,19 +388,19 @@ export class Cline {
         this.presentAssistantMessageLocked = false
 
         if (!block.partial || this.didRejectTool || this.didAlreadyUseTool) {
-			// block is finished streaming and executing
+            // block is finished streaming and executing
             if (this.currentStreamingContentIndex === this.assistantMessageContent.length - 1) {
-				// its okay that we increment if !didCompleteReadingStream, it'll just return bc out of bounds and as streaming continues it will call presentAssitantMessage if a new block is ready. if streaming is finished then we set userMessageContentReady to true when out of bounds. This gracefully allows the stream to continue on and all potential content blocks be presented.
-				// last block is complete and it is finished executing
-				this.userMessageContentReady = true // will allow pwaitfor to continue
+                // its okay that we increment if !didCompleteReadingStream, it'll just return bc out of bounds and as streaming continues it will call presentAssitantMessage if a new block is ready. if streaming is finished then we set userMessageContentReady to true when out of bounds. This gracefully allows the stream to continue on and all potential content blocks be presented.
+                // last block is complete and it is finished executing
+                this.userMessageContentReady = true // will allow pwaitfor to continue
             }
 
-			// call next block if it exists (if not then read stream will call it when its ready)
-			this.currentStreamingContentIndex++ // need to increment regardless, so when read stream calls this function again it will be streaming the next block
+            // call next block if it exists (if not then read stream will call it when its ready)
+            this.currentStreamingContentIndex++ // need to increment regardless, so when read stream calls this function again it will be streaming the next block
 
             if (this.currentStreamingContentIndex < this.assistantMessageContent.length) {
-				// there are already more content blocks to stream, so we'll call this function ourselves
-				// await this.presentAssistantContent()
+                // there are already more content blocks to stream, so we'll call this function ourselves
+                // await this.presentAssistantContent()
 
                 this.presentAssistantMessage()
                 return

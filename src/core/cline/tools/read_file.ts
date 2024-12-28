@@ -17,7 +17,7 @@ export const read_file = async function(this: any, block: ToolUse) {
                 ...sharedMessageProps,
                 content: undefined,
             } satisfies ClineSayTool)
-            if (this.alwaysAllowReadOnly) {
+            if (this.shouldAutoApproveTool(block.name)) {
                 await this.say("tool", partialMessage, undefined, block.partial)
             } else {
                 await this.ask("tool", partialMessage, block.partial).catch(() => {})
@@ -34,8 +34,9 @@ export const read_file = async function(this: any, block: ToolUse) {
                 ...sharedMessageProps,
                 content: absolutePath,
             } satisfies ClineSayTool)
-            if (this.alwaysAllowReadOnly) {
+            if (this.shouldAutoApproveTool(block.name)) {
                 await this.say("tool", completeMessage, undefined, false)
+                this.consecutiveAutoApprovedRequestsCount++
             } else {
                 const didApprove = await askApproval.call(this, block, "tool", completeMessage)
                 if (!didApprove) {

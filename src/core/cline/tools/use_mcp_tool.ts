@@ -16,7 +16,11 @@ export const use_mcp_tool = async function(this: any, block: UseMcpToolToolUse) 
                 toolName: tool_name || "",
                 arguments: mcp_arguments || "",
             } satisfies ClineAskUseMcpServer)
-            await this.ask("use_mcp_server", partialMessage, block.partial).catch(() => {})
+            if (this.shouldAutoApproveTool(block.name)) {
+                await this.say("use_mcp_server", partialMessage, undefined, block.partial).catch(() => {})
+            } else {
+                await this.ask("use_mcp_server", partialMessage, block.partial).catch(() => {})
+            }
             return
         } else {
             if (!server_name) {
@@ -51,9 +55,15 @@ export const use_mcp_tool = async function(this: any, block: UseMcpToolToolUse) 
                 toolName: tool_name,
                 arguments: mcp_arguments,
             } satisfies ClineAskUseMcpServer)
-            const didApprove = await askApproval.call(this, block, "use_mcp_server", completeMessage)
-            if (!didApprove) {
-                return
+
+            if (this.shouldAutoApproveTool(block.name)) {
+                await this.say("use_mcp_server", completeMessage, undefined, false)
+                this.consecutiveAutoApprovedRequestsCount++
+            } else {
+                const didApprove = await askApproval.call(this, block, "use_mcp_server", completeMessage)
+                if (!didApprove) {
+                    return
+                }
             }
 
             await this.say("mcp_server_request_started")

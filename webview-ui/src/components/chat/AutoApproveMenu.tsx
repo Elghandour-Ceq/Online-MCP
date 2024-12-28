@@ -208,7 +208,7 @@ const AutoApproveMenu = ({ style }: AutoApproveMenuProps) => {
 							color: "var(--vscode-descriptionForeground)",
 							fontSize: "12px",
 						}}>
-						Auto-approve allows Cline to perform the following actions without asking for permission. This
+						Auto-approve allows ZAKI to perform the following actions without asking for permission. This
 						is potentially dangerous and could lead to unwanted system modifications. Please use with
 						caution and only enable if you understand the risks.
 					</div>
@@ -267,8 +267,8 @@ const AutoApproveMenu = ({ style }: AutoApproveMenuProps) => {
 							fontSize: "12px",
 							marginBottom: "10px",
 						}}>
-						Cline will make this many API requests before asking for approval to proceed with the task.
-					</div>
+ZAKI will automatically make this many API requests before asking for approval to proceed with
+the task.					</div>
 					<div style={{ margin: "6px 0" }}>
 						<VSCodeCheckbox
 							checked={autoApprovalSettings.enableNotifications}
@@ -284,7 +284,7 @@ const AutoApproveMenu = ({ style }: AutoApproveMenuProps) => {
 								color: "var(--vscode-descriptionForeground)",
 								fontSize: "12px",
 							}}>
-							Receive system notifications when Cline requires approval to proceed or when a task is
+							Receive system notifications when ZAKI requires approval to proceed or when a task is
 							completed.
 						</div>
 					</div>

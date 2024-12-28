@@ -42,6 +42,13 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
         this.diffViewProvider.editType = fileExists ? "modify" : "create"
     }
 
+    const sharedMessageProps: ClineSayTool = {
+        tool: fileExists ? "editedExistingFile" : "newFileCreated",
+        path: getReadablePath(this.cwd, removeClosingTag("path", relPath)),
+        content: fileExists ? undefined : content,
+        diff: fileExists ? diff : undefined,
+    }
+
     try {
         let newContent: string
         if (diff) {
@@ -65,13 +72,6 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
             return undefined
         }
 
-        const sharedMessageProps: ClineSayTool = {
-            tool: fileExists ? "editedExistingFile" : "newFileCreated",
-            path: getReadablePath(this.cwd, removeClosingTag("path", relPath)),
-            content: fileExists ? undefined : newContent,
-            diff: fileExists ? diff : undefined,
-        }
-
         if (!this.api.getModel().id.includes("claude")) {
             // Handle content preprocessing for non-Claude models
             if (
@@ -90,7 +90,11 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
         if (block.partial) {
             // Handle partial updates
             const partialMessage = JSON.stringify(sharedMessageProps)
-            await this.ask("tool", partialMessage, block.partial).catch(() => {})
+            if (this.shouldAutoApproveTool(block.name)) {
+                await this.say("tool", partialMessage, undefined, block.partial)
+            } else {
+                await this.ask("tool", partialMessage, block.partial).catch(() => {})
+            }
             
             if (!this.diffViewProvider.isEditing) {
                 await this.diffViewProvider.open(relPath)
@@ -104,7 +108,11 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
 
         if (!this.diffViewProvider.isEditing) {
             const partialMessage = JSON.stringify(sharedMessageProps)
-            await this.ask("tool", partialMessage, true).catch(() => {})
+            if (this.shouldAutoApproveTool(block.name)) {
+                await this.say("tool", partialMessage, undefined, true)
+            } else {
+                await this.ask("tool", partialMessage, true).catch(() => {})
+            }
             await this.diffViewProvider.open(relPath)
         }
 
@@ -118,10 +126,15 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
             diff: fileExists ? diff : undefined,
         } satisfies ClineSayTool)
 
-        const didApprove = await askApproval.call(this, block, "tool", completeMessage)
-        if (!didApprove) {
-            await this.diffViewProvider.revertChanges()
-            return undefined
+        if (this.shouldAutoApproveTool(block.name)) {
+            await this.say("tool", completeMessage, undefined, false)
+            this.consecutiveAutoApprovedRequestsCount++
+        } else {
+            const didApprove = await askApproval.call(this, block, "tool", completeMessage)
+            if (!didApprove) {
+                await this.diffViewProvider.revertChanges()
+                return undefined
+            }
         }
 
         const { newProblemsMessage, userEdits, finalContent } = await this.diffViewProvider.saveChanges()

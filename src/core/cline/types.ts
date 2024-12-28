@@ -25,7 +25,6 @@ export interface ClineConstructorParams {
     apiConfiguration: ApiConfiguration
     customInstructions?: string
     personality?: string
-    alwaysAllowReadOnly?: boolean
     task?: string
     images?: string[]
     historyItem?: HistoryItem
@@ -40,7 +39,6 @@ export interface ClineState {
     didEditFile: boolean
     customInstructions?: string
     personality?: string
-    alwaysAllowReadOnly: boolean
     apiConversationHistory: Anthropic.MessageParam[]
     clineMessages: ClineMessage[]
     askResponse?: ClineAskResponse

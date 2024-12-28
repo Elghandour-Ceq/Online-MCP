@@ -21,7 +21,7 @@ export const search_files = async function(this: any, block: ToolUse) {
                 ...sharedMessageProps,
                 content: "",
             } satisfies ClineSayTool)
-            if (this.alwaysAllowReadOnly) {
+            if (this.shouldAutoApproveTool(block.name)) {
                 await this.say("tool", partialMessage, undefined, block.partial)
             } else {
                 await this.ask("tool", partialMessage, block.partial).catch(() => {})
@@ -43,8 +43,9 @@ export const search_files = async function(this: any, block: ToolUse) {
                 ...sharedMessageProps,
                 content: results,
             } satisfies ClineSayTool)
-            if (this.alwaysAllowReadOnly) {
+            if (this.shouldAutoApproveTool(block.name)) {
                 await this.say("tool", completeMessage, undefined, false)
+                this.consecutiveAutoApprovedRequestsCount++
             } else {
                 const didApprove = await askApproval.call(this, block, "tool", completeMessage)
                 if (!didApprove) {

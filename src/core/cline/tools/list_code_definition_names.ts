@@ -23,7 +23,7 @@ export const list_code_definition_names = async function(this: any, block: ToolU
                 ...sharedMessageProps,
                 content: "",
             } satisfies ClineSayTool)
-            if (this.alwaysAllowReadOnly) {
+            if (this.shouldAutoApproveTool(block.name)) {
                 await this.say("tool", partialMessage, undefined, block.partial)
             } else {
                 await this.ask("tool", partialMessage, block.partial).catch(() => {})
@@ -47,8 +47,9 @@ export const list_code_definition_names = async function(this: any, block: ToolU
                 ...sharedMessageProps,
                 content: result,
             } satisfies ClineSayTool)
-            if (this.alwaysAllowReadOnly) {
+            if (this.shouldAutoApproveTool(block.name)) {
                 await this.say("tool", completeMessage, undefined, false)
+                this.consecutiveAutoApprovedRequestsCount++
             } else {
                 const didApprove = await askApproval.call(this, block, "tool", completeMessage)
                 if (!didApprove) {

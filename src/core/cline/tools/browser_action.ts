@@ -21,11 +21,20 @@ export const browser_action = async function(this: any, block: ToolUse) {
     try {
         if (block.partial) {
             if (action === "launch") {
-                await this.ask(
-                    "browser_action_launch",
-                    removeClosingTag("url", url),
-                    block.partial,
-                ).catch(() => {})
+                if (this.shouldAutoApproveTool(block.name)) {
+                    await this.say(
+                        "browser_action_launch",
+                        removeClosingTag("url", url),
+                        undefined,
+                        block.partial,
+                    )
+                } else {
+                    await this.ask(
+                        "browser_action_launch",
+                        removeClosingTag("url", url),
+                        block.partial,
+                    ).catch(() => {})
+                }
             } else {
                 await this.say(
                     "browser_action",
@@ -48,9 +57,14 @@ export const browser_action = async function(this: any, block: ToolUse) {
                     await this.browserSession.closeBrowser()
                 }
                 this.consecutiveMistakeCount = 0
-                const didApprove = await askApproval.call(this, block, "browser_action_launch", url)
-                if (!didApprove) {
-                    return
+                if (this.shouldAutoApproveTool(block.name)) {
+                    await this.say("browser_action_launch", url, undefined, false)
+                    this.consecutiveAutoApprovedRequestsCount++
+                } else {
+                    const didApprove = await askApproval.call(this, block, "browser_action_launch", url)
+                    if (!didApprove) {
+                        return
+                    }
                 }
 
                 await this.say("browser_action_result", "")

@@ -44,7 +44,9 @@ export const toolDescription = function (block: ToolUse) {
         case "read_file":
             return `[${block.name} for '${block.params.path}']`
         case "write_to_file":
-            return `[${block.name} for '${block.params.path}']`
+            return `[${block.name} for '${block.params.path}'${block.params.content ? ' with content' : ''}]`
+        case "replace_in_file":
+            return `[${block.name} for '${block.params.path}' with diff]`
         case "search_files":
             return `[${block.name} for '${block.params.regex}'${block.params.file_pattern ? ` in '${block.params.file_pattern}'` : ""
                 }]`

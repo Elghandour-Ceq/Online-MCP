@@ -6,7 +6,6 @@ export interface WebviewMessage {
 		| "personality"
 		| "apiConfiguration"
 		| "customInstructions"
-		| "alwaysAllowReadOnly"
 		| "webviewDidLaunch"
 		| "newTask"
 		| "askResponse"

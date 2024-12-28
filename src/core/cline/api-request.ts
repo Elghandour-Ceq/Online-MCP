@@ -96,6 +96,18 @@ export async function recursivelyMakeClineRequests(
             )
         }
         this.consecutiveMistakeCount = 0
+
+        if (
+			this.autoApprovalSettings.enabled &&
+			this.consecutiveAutoApprovedRequestsCount >= this.autoApprovalSettings.maxRequests
+		) {
+			await this.ask(
+				"auto_approval_max_req_reached",
+				`Cline has auto-approved ${this.autoApprovalSettings.maxRequests.toString()} API requests. Would you like to reset the count and proceed with the task?`,
+			)
+			// if we get past the promise it means the user approved and did not start a new task
+			this.consecutiveAutoApprovedRequestsCount = 0
+		}
     }
 
     // get previous api req's index to check token usage and determine if we need to truncate conversation history

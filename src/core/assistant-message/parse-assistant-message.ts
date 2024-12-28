@@ -61,16 +61,21 @@ export function parseAssistantMessage(assistantMessage: string) {
 
 				// there's no current param, and not starting a new param
 
-				// special case for write_to_file where file contents could contain the closing tag, in which case the param would have closed and we end up with the rest of the file contents here. To work around this, we get the string between the starting content tag and the LAST content tag.
+				// special case for write_to_file/replace_in_file where file contents/diff could contain the closing tag
 				const contentParamName: ToolParamName = "content"
-				if (currentToolUse.name === "write_to_file" && accumulator.endsWith(`</${contentParamName}>`)) {
+				const diffParamName: ToolParamName = "diff"
+				if (
+					(currentToolUse.name === "write_to_file" && accumulator.endsWith(`</${contentParamName}>`)) ||
+					(currentToolUse.name === "replace_in_file" && accumulator.endsWith(`</${diffParamName}>`))
+				) {
 					const toolContent = accumulator.slice(currentToolUseStartIndex)
-					const contentStartTag = `<${contentParamName}>`
-					const contentEndTag = `</${contentParamName}>`
+					const paramName = currentToolUse.name === "write_to_file" ? contentParamName : diffParamName
+					const contentStartTag = `<${paramName}>`
+					const contentEndTag = `</${paramName}>`
 					const contentStartIndex = toolContent.indexOf(contentStartTag) + contentStartTag.length
 					const contentEndIndex = toolContent.lastIndexOf(contentEndTag)
 					if (contentStartIndex !== -1 && contentEndIndex !== -1 && contentEndIndex > contentStartIndex) {
-						currentToolUse.params[contentParamName] = toolContent
+						currentToolUse.params[paramName] = toolContent
 							.slice(contentStartIndex, contentEndIndex)
 							.trim()
 					}
