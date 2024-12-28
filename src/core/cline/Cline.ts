@@ -332,6 +332,7 @@ export class Cline {
                         break
                     case "execute_command":
                         result = await execute_command.call(this, block)
+                        
                         break
                     case "ask_followup_question":
                         result = await ask_followup_question.call(this, block)
