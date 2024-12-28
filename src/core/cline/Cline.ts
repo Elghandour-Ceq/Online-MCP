@@ -251,6 +251,8 @@ export class Cline {
                             return `[${block.name} for '${block.params.path}']`
                         case "write_to_file":
                             return `[${block.name} for '${block.params.path}']`
+                        case "replace_in_file":
+							return `[${block.name} for '${block.params.path}']`
                         case "search_files":
                             return `[${block.name} for '${block.params.regex}'${
                                 block.params.file_pattern ? ` in '${block.params.file_pattern}'` : ""
@@ -318,6 +320,8 @@ export class Cline {
                 let result: ToolResponse | undefined
                 switch (block.name) {
                     case "write_to_file":
+                    case "replace_in_file":
+                        console.log("editing file with", block.name)    
                         result = await write_to_file.call(this, block)
                         break
                     case "read_file":

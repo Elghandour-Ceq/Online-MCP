@@ -14,18 +14,19 @@ import { ToolResponse } from "../types"
 
 export const write_to_file = async function(this: any, block: ToolUse): Promise<ToolResponse | undefined> {
     const relPath: string | undefined = block.params.path
-    let diff: string | undefined = block.params.diff
+    let content: string | undefined = block.params.content // for write_to_file
+    let diff: string | undefined = block.params.diff // for replace_in_file
     
     // Early parameter validation
-    if (!relPath || !diff) {
+    if (!relPath || (!content && !diff)) {
         if (!relPath) {
             this.consecutiveMistakeCount++
             const errorMsg = await this.sayAndCreateMissingParamError("write_to_file", "path")
             return [{ type: "text", text: errorMsg }]
         }
-        if (!diff) {
+        if (block.name === "write_to_file" && !content) {
             this.consecutiveMistakeCount++
-            const errorMsg = await this.sayAndCreateMissingParamError("write_to_file", "diff")
+            const errorMsg = await this.sayAndCreateMissingParamError("write_to_file", "content")
             return [{ type: "text", text: errorMsg }]
         }
         return undefined
@@ -41,17 +42,35 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
         this.diffViewProvider.editType = fileExists ? "modify" : "create"
     }
 
-    const sharedMessageProps: ClineSayTool = {
-        tool: fileExists ? "editedExistingFile" : "newFileCreated",
-        path: getReadablePath(this.cwd, removeClosingTag("path", relPath)),
-    }
-
     try {
-        let newContent = await constructNewFileContent(
-            diff,
-            this.diffViewProvider.originalContent || "",
-            !block.partial,
-        )
+        let newContent: string
+        if (diff) {
+            newContent = await constructNewFileContent(
+                diff,
+                this.diffViewProvider.originalContent || "",
+                !block.partial,
+            )
+        } else if (content) {
+            newContent = content
+            // pre-processing newContent for cases where weaker models might add artifacts like markdown codeblock markers (deepseek/llama) or extra escape characters (gemini)
+            if (newContent.startsWith("```")) {
+                // this handles cases where it includes language specifiers like ```python ```js
+                newContent = newContent.split("\n").slice(1).join("\n").trim()
+            }
+            if (newContent.endsWith("```")) {
+                newContent = newContent.split("\n").slice(0, -1).join("\n").trim()
+            }
+        } else {
+            // can't happen, since we already checked for content/diff above. but need to do this for type error
+            return undefined
+        }
+
+        const sharedMessageProps: ClineSayTool = {
+            tool: fileExists ? "editedExistingFile" : "newFileCreated",
+            path: getReadablePath(this.cwd, removeClosingTag("path", relPath)),
+            content: fileExists ? undefined : newContent,
+            diff: fileExists ? diff : undefined,
+        }
 
         if (!this.api.getModel().id.includes("claude")) {
             // Handle content preprocessing for non-Claude models
@@ -123,11 +142,11 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
                 text: `The user made the following updates to your content:\n\n${userEdits}\n\n` +
                     `The updated content, which includes both your original modifications and the user's edits, has been successfully saved to ${relPath}. Here is the full, updated content of the file:\n\n` +
                     `<final_file_content path="${relPath}">\n${finalContent}\n</final_file_content>\n\n` +
-                    `IMPORTANT: If you need to make further changes to this file, use this final_file_content as the new baseline for your changes, as it is now the current state of the file (including the user's edits and any auto-formatting done by the system). \n\n` +
                     `Please note:\n` +
                     `1. You do not need to re-write the file with these changes, as they have already been applied.\n` +
                     `2. Proceed with the task using this updated file content as the new baseline.\n` +
                     `3. If the user's edits have addressed part of the task or changed the requirements, adjust your approach accordingly.` +
+                    `4. If you need to make further changes to this file, use this final_file_content as the new reference for your SEARCH/REPLACE operations, as it is now the current state of the file (including the user's edits and any auto-formatting done by the system).\n` +
                     `${newProblemsMessage}`
             }]
         }
@@ -138,7 +157,7 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
             text: `The content was successfully saved to ${relPath}.\n\n` +
                 `Here is the full, updated content of the file:\n\n` +
                 `<final_file_content path="${relPath}">\n${finalContent}\n</final_file_content>\n\n` +
-                `IMPORTANT: If you need to make further changes to this file, use this final_file_content as the new baseline for your changes, as it is now the current state of the file (including any auto-formatting done by the system). \n\n` +
+                `Please note: If you need to make further changes to this file, use this final_file_content as the new reference for your SEARCH/REPLACE operations, as it is now the current state of the file (including any auto-formatting done by the system).\n\n` +
                 `${newProblemsMessage}`
         }]
     } catch (error) {
