@@ -57,7 +57,9 @@ export class StateManager {
         this.excludeZakiFolder();
     }
 
-
+    async getAutoApprovalSettings(): Promise<AutoApprovalSettings> {
+        return (await this.getGlobalState("autoApprovalSettings") as AutoApprovalSettings) || DEFAULT_AUTO_APPROVAL_SETTINGS
+    }
 
     async setExtensionActive(isActive: boolean) {
         await this.updateGlobalState("extensionActive", isActive);
