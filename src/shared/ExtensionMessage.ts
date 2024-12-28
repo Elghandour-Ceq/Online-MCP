@@ -69,6 +69,7 @@ export type ClineAsk =
 	| "followup"
 	| "command"
 	| "command_output"
+	| "completion"
 	| "completion_result"
 	| "tool"
 	| "api_req_failed"

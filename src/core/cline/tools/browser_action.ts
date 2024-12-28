@@ -1,9 +1,10 @@
-import { ClineSayTool, ClineSayBrowserAction, BrowserAction, browserActions } from "../../../shared/ExtensionMessage"
+import { ClineSayBrowserAction, BrowserAction, browserActions } from "../../../shared/ExtensionMessage"
 import { formatResponse } from "../../prompts/responses"
 import { ToolUse } from "../../assistant-message"
 import { removeClosingTag, askApproval, handleError } from "./helpers"
+import { ToolResponse } from "../types"
 
-export const browser_action = async function(this: any, block: ToolUse) {
+export const browser_action = async function(this: any, block: ToolUse): Promise<ToolResponse | undefined> {
     const action: BrowserAction | undefined = block.params.action as BrowserAction
     const url: string | undefined = block.params.url
     const coordinate: string | undefined = block.params.coordinate
@@ -12,10 +13,11 @@ export const browser_action = async function(this: any, block: ToolUse) {
     if (!action || !browserActions.includes(action)) {
         if (!block.partial) {
             this.consecutiveMistakeCount++
-            return [await this.sayAndCreateMissingParamError("browser_action", "action")]
+            const errorMsg = await this.sayAndCreateMissingParamError("browser_action", "action")
             await this.browserSession.closeBrowser()
+            return [{ type: "text" as const, text: errorMsg }]
         }
-        return
+        return undefined
     }
 
     try {
@@ -48,102 +50,112 @@ export const browser_action = async function(this: any, block: ToolUse) {
                     block.partial,
                 )
             }
-            return
-        } else {
-            let browserActionResult
-            if (action === "launch") {
-                if (!url) {
-                    this.consecutiveMistakeCount++
-                    return [await this.sayAndCreateMissingParamError("browser_action", "url")]
-                    await this.browserSession.closeBrowser()
-                }
-                this.consecutiveMistakeCount = 0
+            return undefined
+        }
 
-                this.showNotificationForApprovalIfAutoApprovalEnabled(
-                    `Zaki wants to use a browser and launch ${url}`
-                )
+        let browserActionResult
+        if (action === "launch") {
+            if (!url) {
+                this.consecutiveMistakeCount++
+                const errorMsg = await this.sayAndCreateMissingParamError("browser_action", "url")
+                await this.browserSession.closeBrowser()
+                return [{ type: "text" as const, text: errorMsg }]
+            }
+            this.consecutiveMistakeCount = 0
 
-                if (this.shouldAutoApproveTool(block.name)) {
-                    this.consecutiveAutoApprovedRequestsCount++
-                    await this.say("browser_action_launch", url, undefined, false)
-                } else {
-                    const didApprove = await askApproval.call(this, block, "browser_action_launch", url)
-                    if (!didApprove) {
-                        return
-                    }
-                }
+            this.showNotificationForApprovalIfAutoApprovalEnabled(
+                `ZAKI wants to use a browser and launch ${url}`
+            )
 
-                await this.say("browser_action_result", "")
-
-                await this.browserSession.launchBrowser()
-                browserActionResult = await this.browserSession.navigateToUrl(url)
+            if (this.shouldAutoApproveTool(block.name)) {
+                this.consecutiveAutoApprovedRequestsCount++
+                await this.say("browser_action_launch", url, undefined, false)
             } else {
-                if (action === "click") {
-                    if (!coordinate) {
-                        this.consecutiveMistakeCount++
-                        return [await this.sayAndCreateMissingParamError("browser_action", "coordinate")]
-                        await this.browserSession.closeBrowser()
-                    }
-                }
-                if (action === "type") {
-                    if (!text) {
-                        this.consecutiveMistakeCount++
-                        return [await this.sayAndCreateMissingParamError("browser_action", "text")]
-                        await this.browserSession.closeBrowser()
-                    }
-                }
-                this.consecutiveMistakeCount = 0
-                await this.say(
-                    "browser_action",
-                    JSON.stringify({
-                        action: action as BrowserAction,
-                        coordinate,
-                        text,
-                    } satisfies ClineSayBrowserAction),
-                    undefined,
-                    false,
-                )
-                switch (action) {
-                    case "click":
-                        browserActionResult = await this.browserSession.click(coordinate!)
-                        break
-                    case "type":
-                        browserActionResult = await this.browserSession.type(text!)
-                        break
-                    case "scroll_down":
-                        browserActionResult = await this.browserSession.scrollDown()
-                        break
-                    case "scroll_up":
-                        browserActionResult = await this.browserSession.scrollUp()
-                        break
-                    case "close":
-                        browserActionResult = await this.browserSession.closeBrowser()
-                        break
+                const didApprove = await askApproval.call(this, block, "browser_action_launch", url)
+                if (!didApprove) {
+                    return undefined
                 }
             }
 
-            switch (action) {
-                case "launch":
-                case "click":
-                case "type":
-                case "scroll_down":
-                case "scroll_up":
-                    await this.say("browser_action_result", JSON.stringify(browserActionResult))
-                    return [formatResponse.toolResult(
-                        `The browser action has been executed. The console logs and screenshot have been captured for your analysis.\n\nConsole logs:\n${
-                            browserActionResult.logs || "(No new logs)"
-                        }\n\n(REMEMBER: if you need to proceed to using non-\`browser_action\` tools or launch a new browser, you MUST first close this browser. For example, if after analyzing the logs and screenshot you need to edit a file, you must first close the browser before you can use the write_to_file tool.)`,
-                        browserActionResult.screenshot ? [browserActionResult.screenshot] : [],
-                    )]
-                case "close":
-                    return [formatResponse.toolResult(
-                        `The browser has been closed. You may now proceed to using other tools.`,
-                    )]
+            await this.say("browser_action_result", "")
+
+            await this.browserSession.launchBrowser()
+            browserActionResult = await this.browserSession.navigateToUrl(url)
+        } else {
+            if (action === "click" && !coordinate) {
+                this.consecutiveMistakeCount++
+                const errorMsg = await this.sayAndCreateMissingParamError("browser_action", "coordinate")
+                await this.browserSession.closeBrowser()
+                return [{ type: "text" as const, text: errorMsg }]
             }
+            if (action === "type" && !text) {
+                this.consecutiveMistakeCount++
+                const errorMsg = await this.sayAndCreateMissingParamError("browser_action", "text")
+                await this.browserSession.closeBrowser()
+                return [{ type: "text" as const, text: errorMsg }]
+            }
+            this.consecutiveMistakeCount = 0
+            await this.say(
+                "browser_action",
+                JSON.stringify({
+                    action: action as BrowserAction,
+                    coordinate,
+                    text,
+                } satisfies ClineSayBrowserAction),
+                undefined,
+                false,
+            )
+            switch (action) {
+                case "click":
+                    browserActionResult = await this.browserSession.click(coordinate!)
+                    break
+                case "type":
+                    browserActionResult = await this.browserSession.type(text!)
+                    break
+                case "scroll_down":
+                    browserActionResult = await this.browserSession.scrollDown()
+                    break
+                case "scroll_up":
+                    browserActionResult = await this.browserSession.scrollUp()
+                    break
+                case "close":
+                    browserActionResult = await this.browserSession.closeBrowser()
+                    break
+            }
+        }
+
+        switch (action) {
+            case "launch":
+            case "click":
+            case "type":
+            case "scroll_down":
+            case "scroll_up":
+                await this.say("browser_action_result", JSON.stringify(browserActionResult))
+                return [
+                    {
+                        type: "text" as const,
+                        text: `The browser action has been executed. The console logs and screenshot have been captured for your analysis.\n\nConsole logs:\n${
+                            browserActionResult.logs || "(No new logs)"
+                        }\n\n(REMEMBER: if you need to proceed to using non-\`browser_action\` tools or launch a new browser, you MUST first close this browser. For example, if after analyzing the logs and screenshot you need to edit a file, you must first close the browser before you can use the write_to_file tool.)`
+                    },
+                    ...(browserActionResult.screenshot ? [{
+                        type: "image" as const,
+                        source: {
+                            type: "base64" as const,
+                            media_type: "image/png" as const,
+                            data: browserActionResult.screenshot.split(",")[1]
+                        }
+                    }] : [])
+                ]
+            case "close":
+                return [{
+                    type: "text" as const,
+                    text: `The browser has been closed. You may now proceed to using other tools.`
+                }]
         }
     } catch (error) {
         await this.browserSession.closeBrowser()
         const result = await handleError.call(this, "executing browser action", error)
-        return [result]
+        return [{ type: "text" as const, text: result }]
     }
 }
