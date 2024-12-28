@@ -11,6 +11,7 @@ import { ToolUse } from "../../assistant-message"
 import { constructNewFileContent } from "../../assistant-message/diff"
 import { removeClosingTag, askApproval, handleError } from "./helpers"
 import { ToolResponse } from "../types"
+import { serializeError } from "serialize-error"
 
 export const write_to_file = async function(this: any, block: ToolUse): Promise<ToolResponse | undefined> {
     const relPath: string | undefined = block.params.path
@@ -51,11 +52,26 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
     try {
         let newContent: string
         if (diff) {
-            newContent = await constructNewFileContent(
-                diff,
-                this.diffViewProvider.originalContent || "",
-                !block.partial,
-            )
+            try {
+                newContent = await constructNewFileContent(
+                    diff,
+                    this.diffViewProvider.originalContent || "",
+                    !block.partial,
+                )
+            } catch (error) {
+                await this.say(
+                    "error",
+                    `Failed to apply changes to ${relPath}. The model's diff instructions could not be processed correctly. This usually happens when the search patterns don't match the file content exactly.`,
+                )
+                await this.diffViewProvider.revertChanges()
+                await this.diffViewProvider.reset()
+                return [{
+                    type: "text",
+                    text: formatResponse.toolError(
+                        `Error writing file: ${JSON.stringify(serializeError(error))}`,
+                    )
+                }]
+            }
         } else if (content) {
             newContent = content
             // pre-processing newContent for cases where weaker models might add artifacts like markdown codeblock markers (deepseek/llama) or extra escape characters (gemini)
@@ -130,7 +146,7 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
             await this.say("tool", completeMessage, undefined, false)
             this.consecutiveAutoApprovedRequestsCount++
             // we need an artificial delay to let the diagnostics catch up to the changes
-									await delay(3_500)
+            await delay(3_500)
         } else {
             const didApprove = await askApproval.call(this, block, "tool", completeMessage)
             if (!didApprove) {
@@ -177,6 +193,7 @@ export const write_to_file = async function(this: any, block: ToolUse): Promise<
         }]
     } catch (error) {
         const result = await handleError.call(this, "writing file", error)
+        await this.diffViewProvider.revertChanges()
         await this.diffViewProvider.reset()
         return [{ type: "text", text: result }]
     }
