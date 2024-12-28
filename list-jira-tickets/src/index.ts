@@ -115,7 +115,7 @@ class JiraServer {
         };
 
         if (request.params.name === 'list_sprint_tickets') {
-          jql = 'assignee = "y.khira@cequens.com" AND sprint in openSprints() ORDER BY priority DESC, updated DESC';
+          jql = `assignee = "${JIRA_USERNAME}" AND sprint in openSprints() ORDER BY priority DESC, updated DESC`;
         } else {
           jql = args.jql!;
         }
